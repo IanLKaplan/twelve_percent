@@ -56,7 +56,10 @@ plt.style.use('seaborn-whitegrid')
 equity_etfs = ['IWM', 'MDY', 'QQQ', 'SPY']
 bond_etfs = ['JNK', 'TLT']
 cash_etf = 'SHY'
-etf_set = [*equity_etfs, *bond_etfs, cash_etf]
+
+trading_days = 252
+days_in_quarter = trading_days // 4
+days_in_month = trading_days // 12
 
 data_source = 'yahoo'
 # The start date is the date used in the examples in The 12% Solution
@@ -65,21 +68,48 @@ start_date_str = '2008-01-03'
 start_date: datetime = datetime.fromisoformat(start_date_str)
 end_date: datetime = datetime.today() - timedelta(days=1)
 
-trading_days = 253
-days_in_quarter = trading_days // 4
-days_in_month = trading_days // 12
+equity_etf_file = 'equity_etf_close'
 
-twelve_percent_etf_file = 'twelve_percent_etf_close'
-
-etf_set_close = get_market_data(file_name=twelve_percent_etf_file,
+etf_close = get_market_data(file_name=equity_etf_file,
                                 data_col='Close',
-                                symbols=etf_set,
+                                symbols=equity_etfs,
+                                data_source=data_source,
+                                start_date=start_date  - timedelta(days=days_in_quarter),
+                                end_date=end_date)
+
+shy_adjclose_file = 'shy_adjclose'
+shy_adj_adjclose = get_market_data(file_name=shy_adjclose_file,
+                                data_col='Adj Close',
+                                symbols=[cash_etf],
                                 data_source=data_source,
                                 start_date=start_date,
                                 end_date=end_date)
 
-equity_set_close = etf_set_close[equity_etfs]
-corr_mat = round(equity_set_close.corr(), 2)
+shy_close_file = 'shy_close'
+shy_adj_close = get_market_data(file_name=shy_close_file,
+                                data_col='Close',
+                                symbols=[cash_etf],
+                                data_source=data_source,
+                                start_date=start_date,
+                                end_date=end_date)
+
+fixed_income_adjclose_file = "fixed_income_adjclose"
+fixed_income_adjclose = get_market_data(file_name=fixed_income_adjclose_file,
+                                data_col='Adj Close',
+                                symbols=bond_etfs,
+                                data_source=data_source,
+                                start_date=start_date,
+                                end_date=end_date)
+
+fixed_income_close_file = "fixed_income_close"
+fixed_income_close = get_market_data(file_name=fixed_income_close_file,
+                                data_col='Close',
+                                symbols=bond_etfs,
+                                data_source=data_source,
+                                start_date=start_date,
+                                end_date=end_date)
+
+corr_mat = round(etf_close.corr(), 3)
 print(tabulate(corr_mat, headers=[*corr_mat.columns], tablefmt='fancy_grid'))
 
 print("Hi there")
