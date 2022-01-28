@@ -11,6 +11,7 @@ from pypfopt import plotting, CLA
 import matplotlib.pyplot as plt
 import scipy.stats as stats
 import pandas as pd
+from pandas.core.indexes.datetimes import DatetimeIndex
 import numpy as np
 from pathlib import Path
 import tempfile
@@ -64,7 +65,7 @@ days_in_month = trading_days // 12
 data_source = 'yahoo'
 # The start date is the date used in the examples in The 12% Solution
 # yyyy-mm-dd
-start_date_str = '2008-01-03'
+start_date_str = '2008-01-01'
 start_date: datetime = datetime.fromisoformat(start_date_str)
 end_date: datetime = datetime.today() - timedelta(days=1)
 
@@ -74,7 +75,7 @@ etf_close = get_market_data(file_name=equity_etf_file,
                                 data_col='Close',
                                 symbols=equity_etfs,
                                 data_source=data_source,
-                                start_date=start_date  - timedelta(days=days_in_quarter),
+                                start_date=start_date  - timedelta(days=(365//4)),
                                 end_date=end_date)
 
 shy_adjclose_file = 'shy_adjclose'
@@ -82,7 +83,7 @@ shy_adj_adjclose = get_market_data(file_name=shy_adjclose_file,
                                 data_col='Adj Close',
                                 symbols=[cash_etf],
                                 data_source=data_source,
-                                start_date=start_date,
+                                start_date=start_date - timedelta(days=(365//4)),
                                 end_date=end_date)
 
 shy_close_file = 'shy_close'
@@ -111,5 +112,20 @@ fixed_income_close = get_market_data(file_name=fixed_income_close_file,
 
 corr_mat = round(etf_close.corr(), 3)
 print(tabulate(corr_mat, headers=[*corr_mat.columns], tablefmt='fancy_grid'))
+
+
+def findDateIndex(ix: DatetimeIndex, search_date: datetime) -> int:
+    index: int = -1
+    for i, date in enumerate(ix):
+        if date == search_date:
+            index = i
+            break
+    return index
+
+newyears_2008_ix = findDateIndex(etf_close.index, datetime.fromisoformat('2008-01-03'))
+
+assert newyears_2008_ix >= 0
+
+
 
 print("Hi there")
