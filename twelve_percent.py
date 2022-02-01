@@ -79,7 +79,7 @@ etf_close = get_market_data(file_name=equity_etf_file,
                                 end_date=end_date)
 
 shy_adjclose_file = 'shy_adjclose'
-shy_adj_adjclose = get_market_data(file_name=shy_adjclose_file,
+shy_adj_close = get_market_data(file_name=shy_adjclose_file,
                                 data_col='Adj Close',
                                 symbols=[cash_etf],
                                 data_source=data_source,
@@ -87,7 +87,7 @@ shy_adj_adjclose = get_market_data(file_name=shy_adjclose_file,
                                 end_date=end_date)
 
 shy_close_file = 'shy_close'
-shy_adj_close = get_market_data(file_name=shy_close_file,
+shy_close = get_market_data(file_name=shy_close_file,
                                 data_col='Close',
                                 symbols=[cash_etf],
                                 data_source=data_source,
@@ -117,7 +117,8 @@ print(tabulate(corr_mat, headers=[*corr_mat.columns], tablefmt='fancy_grid'))
 def findDateIndex(ix: DatetimeIndex, search_date: datetime) -> int:
     index: int = -1
     for i, date in enumerate(ix):
-        if date == search_date:
+        date_t = datetime.fromisoformat(date)
+        if date_t == search_date:
             index = i
             break
     return index
@@ -126,6 +127,25 @@ newyears_2008_ix = findDateIndex(etf_close.index, datetime.fromisoformat('2008-0
 
 assert newyears_2008_ix >= 0
 
+def chooseAsset(start: int, end: int, etf_set: pd.DataFrame, cash: pd.DataFrame) -> pd.DataFrame:
+    returns: pd.DataFrame = pd.DataFrame()
+    for asset in etf_set.columns:
+        t1 = etf_set[asset][start]
+        t2 = etf_set[asset][end]
+        r = (t2/t1) - 1
+        returns[asset] = [r]
+    cash_t1 = cash[cash.columns[0]][start]
+    cash_t2 = cash[cash.columns[0]][end]
+    cash_ret = (t2/t1) - 1
+    max_ret = returns.max(axis=1)
+    rslt_df = cash
+    if float(max_ret) > cash_ret:
+        for asset in returns.columns:
+            if returns[asset][0] == float(max_ret):
+                rslt_df = pd.DataFrame(etf_set[asset])
+    return rslt_df
+
+ts_df = chooseAsset(0, newyears_2008_ix, etf_close, shy_adj_close)
 
 
 print("Hi there")
