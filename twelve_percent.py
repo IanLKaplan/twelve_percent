@@ -117,13 +117,14 @@ print(tabulate(corr_mat, headers=[*corr_mat.columns], tablefmt='fancy_grid'))
 def findDateIndex(ix: DatetimeIndex, search_date: datetime) -> int:
     index: int = -1
     for i, date in enumerate(ix):
-        date_t = datetime.fromisoformat(date)
+        date_t: datetime = datetime.fromisoformat(date)
         if date_t == search_date:
             index = i
             break
     return index
 
-newyears_2008_ix = findDateIndex(etf_close.index, datetime.fromisoformat('2008-01-03'))
+first_2008_trading_day = datetime.fromisoformat('2008-01-03')
+newyears_2008_ix = findDateIndex(etf_close.index, first_2008_trading_day)
 
 assert newyears_2008_ix >= 0
 
@@ -136,7 +137,7 @@ def chooseAsset(start: int, end: int, etf_set: pd.DataFrame, cash: pd.DataFrame)
         returns[asset] = [r]
     cash_t1 = cash[cash.columns[0]][start]
     cash_t2 = cash[cash.columns[0]][end]
-    cash_ret = (t2/t1) - 1
+    cash_ret = (cash_t2/cash_t1) - 1
     max_ret = returns.max(axis=1)
     rslt_df = cash
     if float(max_ret) > cash_ret:
@@ -144,6 +145,14 @@ def chooseAsset(start: int, end: int, etf_set: pd.DataFrame, cash: pd.DataFrame)
             if returns[asset][0] == float(max_ret):
                 rslt_df = pd.DataFrame(etf_set[asset])
     return rslt_df
+
+last_quarter:pd.DataFrame = etf_close[:][0:newyears_2008_ix].copy()
+last_quarter[shy_adj_close.columns[0]] = shy_adj_close
+
+for col in last_quarter.columns:
+    last_quarter[col] = last_quarter[col] - last_quarter[col][0]
+
+last_quarter.plot(grid=True, title='4th Quarter 2007 Returns', figsize=(10,6))
 
 ts_df = chooseAsset(0, newyears_2008_ix, etf_close, shy_adj_close)
 
