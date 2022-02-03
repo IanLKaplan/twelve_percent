@@ -1,3 +1,4 @@
+
 from datetime import datetime, timedelta
 
 import matplotlib
@@ -58,25 +59,21 @@ equity_etfs = ['IWM', 'MDY', 'QQQ', 'SPY']
 bond_etfs = ['JNK', 'TLT']
 cash_etf = 'SHY'
 
-trading_days = 252
-days_in_quarter = trading_days // 4
-days_in_month = trading_days // 12
-
 data_source = 'yahoo'
 # The start date is the date used in the examples in The 12% Solution
 # yyyy-mm-dd
-start_date_str = '2008-01-01'
+start_date_str = '2008-01-02'
+fixed_income_start:datetime = datetime.fromisoformat('2007-12-03')
 start_date: datetime = datetime.fromisoformat(start_date_str)
 end_date: datetime = datetime.today() - timedelta(days=1)
 
-equity_etf_file = 'equity_etf_close'
-
-etf_close = get_market_data(file_name=equity_etf_file,
-                                data_col='Close',
-                                symbols=equity_etfs,
-                                data_source=data_source,
-                                start_date=start_date  - timedelta(days=(365//4)),
-                                end_date=end_date)
+etf_close_file = 'equity_etf_close'
+etf_close = get_market_data(file_name=etf_close_file,
+                            data_col='Close',
+                            symbols=equity_etfs,
+                            data_source=data_source,
+                            start_date=start_date  - timedelta(days=(365//4)),
+                            end_date=end_date)
 
 shy_adjclose_file = 'shy_adjclose'
 shy_adj_close = get_market_data(file_name=shy_adjclose_file,
@@ -91,7 +88,7 @@ shy_close = get_market_data(file_name=shy_close_file,
                                 data_col='Close',
                                 symbols=[cash_etf],
                                 data_source=data_source,
-                                start_date=start_date,
+                                start_date=start_date - timedelta(days=(365//4)),
                                 end_date=end_date)
 
 fixed_income_adjclose_file = "fixed_income_adjclose"
@@ -99,7 +96,7 @@ fixed_income_adjclose = get_market_data(file_name=fixed_income_adjclose_file,
                                 data_col='Adj Close',
                                 symbols=bond_etfs,
                                 data_source=data_source,
-                                start_date=start_date,
+                                start_date=fixed_income_start,
                                 end_date=end_date)
 
 fixed_income_close_file = "fixed_income_close"
@@ -107,24 +104,27 @@ fixed_income_close = get_market_data(file_name=fixed_income_close_file,
                                 data_col='Close',
                                 symbols=bond_etfs,
                                 data_source=data_source,
-                                start_date=start_date,
+                                start_date=fixed_income_start,
                                 end_date=end_date)
 
 corr_mat = round(etf_close.corr(), 3)
+
+
 print(tabulate(corr_mat, headers=[*corr_mat.columns], tablefmt='fancy_grid'))
 
 
 def findDateIndex(ix: DatetimeIndex, search_date: datetime) -> int:
     index: int = -1
     for i, date in enumerate(ix):
-        date_t: datetime = datetime.fromisoformat(date)
+        date_t = date
+        if type(date) == str:
+            date_t: datetime = datetime.fromisoformat(date)
         if date_t == search_date:
             index = i
             break
     return index
 
-first_2008_trading_day = datetime.fromisoformat('2008-01-03')
-newyears_2008_ix = findDateIndex(etf_close.index, first_2008_trading_day)
+newyears_2008_ix = findDateIndex(etf_close.index, start_date)
 
 assert newyears_2008_ix >= 0
 
@@ -146,6 +146,12 @@ def chooseAsset(start: int, end: int, etf_set: pd.DataFrame, cash: pd.DataFrame)
                 rslt_df = pd.DataFrame(etf_set[asset])
     return rslt_df
 
+
+ts_df = chooseAsset(0, newyears_2008_ix, etf_close, shy_adj_close)
+
+print(f'The asset for the first three month period will be {ts_df.columns[0]}')
+
+
 last_quarter:pd.DataFrame = etf_close[:][0:newyears_2008_ix].copy()
 last_quarter[shy_adj_close.columns[0]] = shy_adj_close
 
@@ -154,7 +160,15 @@ for col in last_quarter.columns:
 
 last_quarter.plot(grid=True, title='4th Quarter 2007 Returns', figsize=(10,6))
 
-ts_df = chooseAsset(0, newyears_2008_ix, etf_close, shy_adj_close)
+holdings = 100000
+equity = 0.6
+bonds = 0.4
 
+trading_days = 252
+days_in_quarter = trading_days // 4
+days_in_month = trading_days // 12
+
+jnk_start_date_str = "2008-03-03"
+jnk_start_date: datetime = datetime.fromisoformat( jnk_start_date_str )
 
 print("Hi there")
