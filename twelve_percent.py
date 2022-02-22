@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import scipy.stats as stats
 import pandas as pd
 from pandas.core.indexes.datetimes import DatetimeIndex
+from dateutil.relativedelta import relativedelta
 import numpy as np
 from pathlib import Path
 import tempfile
@@ -63,15 +64,22 @@ data_source = 'yahoo'
 # The start date is the date used in the examples in The 12% Solution
 # yyyy-mm-dd
 start_date_str = '2008-03-03'
-look_back_start_str = '2007-12-01'
 start_date: datetime = datetime.fromisoformat(start_date_str)
-look_back_date: datetime = datetime.fromisoformat(look_back_start_str)
+look_back_date_str = '2007-12-03'
+look_back_date: datetime = datetime.fromisoformat(look_back_date_str)
 end_date: datetime = datetime.today() - timedelta(days=1)
 
-equity_etf_file = 'equity_etf_close'
-
-etf_close = get_market_data(file_name=equity_etf_file,
+etf_close_file = 'equity_etf_close'
+etf_close = get_market_data(file_name=etf_close_file,
                                 data_col='Close',
+                                symbols=equity_etfs,
+                                data_source=data_source,
+                                start_date=look_back_date,
+                                end_date=end_date)
+
+etf_adjclose_file = 'equity_etf_adjclose'
+equity_adj_close = get_market_data(file_name=etf_adjclose_file,
+                                data_col='Adj Close',
                                 symbols=equity_etfs,
                                 data_source=data_source,
                                 start_date=look_back_date,
@@ -114,53 +122,59 @@ corr_mat = round(etf_close.corr(), 3)
 
 print(tabulate(corr_mat, headers=[*corr_mat.columns], tablefmt='fancy_grid'))
 
+asset_adj_close = equity_adj_close.copy()
+asset_adj_close[shy_adj_close.columns[0]] = shy_adj_close
+
 
 def findDateIndex(ix: DatetimeIndex, search_date: datetime) -> int:
     '''
-    Given a datetime index (a series of date time values used as an index
-    for a Series or DataFrame) and a search date, return the index of the
-    search date in the datetime index or -1 if the date is not found.
+    In a DatetimeIndex, find the index of the date that is nearest to search_date.
+    This date will either be equal to search_date or the next date that is less than
+    search_date
     '''
     index: int = -1
-    for i, date in enumerate(ix):
-        date_t = date
-        if type(date) == str:
-            date_t: datetime = datetime.fromisoformat(date)
-        if date_t == search_date:
-            index = i
+    i = 0
+    date_t = datetime.today()
+    for i in range(0, len(ix)):
+        date_t = ix[i]
+        if type(date_t) == str:
+            date_t = datetime.fromisoformat(date_t)
+        if date_t >= search_date:
             break
+    if i < len(ix):
+        if date_t > search_date:
+            index = i -1
+        else:
+            index = i
     return index
 
-start_date_ix = findDateIndex(etf_close.index, start_date)
+
+start_date_ix = findDateIndex(asset_adj_close.index, start_date)
 
 assert start_date_ix >= 0
 
-def chooseAsset(start: int, end: int, etf_set: pd.DataFrame, cash: pd.DataFrame) -> pd.DataFrame:
+def chooseAsset(start: int, end: int, asset_set: pd.DataFrame) -> pd.DataFrame:
     '''
     Choose an ETF asset or cash for a particular range of close price values.
+    The ETF and cash time series should be contained in a single DataFrame
+    The function returns a DataFrame with the highest returning asset for the
+    period.
     '''
-    returns: pd.DataFrame = pd.DataFrame()
-    for asset in etf_set.columns:
-        t1 = etf_set[asset][start]
-        t2 = etf_set[asset][end]
-        r = (t2/t1) - 1
-        returns[asset] = [r]
-    cash_t1 = cash[cash.columns[0]][start]
-    cash_t2 = cash[cash.columns[0]][end]
-    cash_ret = (cash_t2/cash_t1) - 1
-    max_ret = returns.max(axis=1)
-    rslt_df = cash
-    if float(max_ret) > cash_ret:
-        for asset in returns.columns:
-            if returns[asset][0] == float(max_ret):
-                rslt_df = pd.DataFrame(etf_set[asset])
+    rslt_df = asset_set
+    if asset_set.shape[1] > 1:
+        returns: pd.DataFrame = pd.DataFrame()
+        for asset in asset_set.columns:
+            t1 = asset_set[asset][start]
+            t2 = asset_set[asset][end]
+            r = (t2/t1) - 1
+            returns[asset] = [r]
+        column = returns.idxmax(axis=1)[0]
+        rslt_df = pd.DataFrame(asset_set[column])
     return rslt_df
 
-
-ts_df = chooseAsset(0, start_date_ix, etf_close, shy_adj_close)
+ts_df = chooseAsset(0, start_date_ix, asset_adj_close)
 
 print(f'The asset for the first three month period will be {ts_df.columns[0]}')
-
 
 last_quarter:pd.DataFrame = etf_close[:][0:start_date_ix].copy()
 last_quarter[shy_adj_close.columns[0]] = shy_adj_close
@@ -170,16 +184,77 @@ for col in last_quarter.columns:
 
 last_quarter.plot(grid=True, title='4th Quarter 2007 Returns', figsize=(10,6))
 
+def simple_return(time_series: np.array, period: int) -> List :
+    return list(((time_series[i]/time_series[i-period]) - 1.0 for i in range(period, len(time_series), period)))
+
+
+def return_df(time_series_df: pd.DataFrame) -> pd.DataFrame:
+    r_df: pd.DataFrame = pd.DataFrame()
+    time_series_a: np.array = time_series_df.values
+    return_l = simple_return(time_series_a, 1)
+    r_df = pd.DataFrame(return_l)
+    index = time_series_df.index
+    r_df.set_index(index[1:len(index)])
+    r_df.columns = time_series_df.columns
+    return r_df
+
+
+def apply_return(start_val: float, return_df: pd.DataFrame) -> np.array:
+    port_a: np.array = np.zeros( return_df.shape[0])
+    port_a[0] = start_val
+    return_a = return_df.values
+    for i in range(1, len(return_a)):
+        port_a[i] = port_a[i-1] + port_a[i-1] * return_a[i]
+    return port_a
+
+
+def portfolio_return(holdings: float,
+                     asset_percent: float,
+                     bond_percent: float,
+                     asset_etfs: pd.DataFrame,
+                     bond_etfs: pd.DataFrame,
+                     start_date: datetime,
+                     end_date: datetime) -> pd.DataFrame:
+    asset_holding= holdings * asset_percent
+    bond_holding=holdings * bond_percent
+    back_delta = relativedelta(months=3)
+    forward_delta = relativedelta(months=1)
+    date_index = asset_etfs.index
+    start_date_ix = start_date
+    while start_date_ix < end_date:
+        back_start = start_date_ix - back_delta
+        back_end = start_date_ix
+        forward_end = start_date_ix + forward_delta
+        start_ix = findDateIndex(date_index, back_start)
+        end_ix = findDateIndex(date_index, back_end)
+        forward_ix = findDateIndex(date_index, forward_end)
+        asset_df = chooseAsset(start=start_ix, end=end_ix, asset_set=asset_etfs)
+        asset_month_df = asset_df[:][end_ix:forward_ix]
+        asset_return_df = return_df(asset_month_df)
+        bond_df = chooseAsset(start=start_ix, end=end_ix, asset_set=bond_etfs)
+        bond_month_df = bond_df[:][end_ix:forward_ix]
+        bond_return_df = return_df(bond_month_df)
+        port_asset_a = apply_return(asset_holding, asset_return_df)
+        port_bond_a = apply_return(bond_holding, bond_return_df)
+        port_total_a = port_asset_a + port_bond_a
+        asset_holding = port_total_a[-1] * asset_percent
+        bond_holding = port_total_a[-1] * bond_percent
+        return pd.DataFrame()
+
+
 holdings = 100000
 equity_percent = 0.6
-bonds_percent = 0.4
+bond_percent = 0.4
 
-equity=holdings * equity_percent
-bonds=holdings * bonds_percent
+tlt = pd.DataFrame(fixed_income_adjclose['TLT'])
+portfolio_df: pd.DataFrame = portfolio_return(holdings=holdings,
+                                              asset_percent=equity_percent,
+                                              bond_percent=bond_percent,
+                                              asset_etfs=asset_adj_close,
+                                              bond_etfs=tlt,
+                                              start_date=start_date,
+                                              end_date=end_date)
 
-trading_days = 252
-days_in_quarter = trading_days // 4
-days_in_month = trading_days // 12
 
 
 print("Hi there")
