@@ -69,14 +69,6 @@ look_back_date_str = '2007-12-03'
 look_back_date: datetime = datetime.fromisoformat(look_back_date_str)
 end_date: datetime = datetime.today() - timedelta(days=1)
 
-etf_close_file = 'equity_etf_close'
-etf_close = get_market_data(file_name=etf_close_file,
-                                data_col='Close',
-                                symbols=equity_etfs,
-                                data_source=data_source,
-                                start_date=look_back_date,
-                                end_date=end_date)
-
 etf_adjclose_file = 'equity_etf_adjclose'
 equity_adj_close = get_market_data(file_name=etf_adjclose_file,
                                 data_col='Adj Close',
@@ -93,14 +85,6 @@ shy_adj_close = get_market_data(file_name=shy_adjclose_file,
                                 start_date=look_back_date,
                                 end_date=end_date)
 
-shy_close_file = 'shy_close'
-shy_close = get_market_data(file_name=shy_close_file,
-                                data_col='Close',
-                                symbols=[cash_etf],
-                                data_source=data_source,
-                                start_date=look_back_date,
-                                end_date=end_date)
-
 fixed_income_adjclose_file = "fixed_income_adjclose"
 fixed_income_adjclose = get_market_data(file_name=fixed_income_adjclose_file,
                                 data_col='Adj Close',
@@ -109,15 +93,7 @@ fixed_income_adjclose = get_market_data(file_name=fixed_income_adjclose_file,
                                 start_date=look_back_date,
                                 end_date=end_date)
 
-fixed_income_close_file = "fixed_income_close"
-fixed_income_close = get_market_data(file_name=fixed_income_close_file,
-                                data_col='Close',
-                                symbols=bond_etfs,
-                                data_source=data_source,
-                                start_date=look_back_date,
-                                end_date=end_date)
-
-corr_mat = round(etf_close.corr(), 3)
+corr_mat = round(equity_adj_close.corr(), 3)
 
 
 print(tabulate(corr_mat, headers=[*corr_mat.columns], tablefmt='fancy_grid'))
@@ -126,7 +102,7 @@ asset_adj_close = equity_adj_close.copy()
 asset_adj_close[shy_adj_close.columns[0]] = shy_adj_close
 
 
-def findDateIndex(ix: DatetimeIndex, search_date: datetime) -> int:
+def findDateIndex(date_index: DatetimeIndex, search_date: datetime) -> int:
     '''
     In a DatetimeIndex, find the index of the date that is nearest to search_date.
     This date will either be equal to search_date or the next date that is less than
@@ -135,13 +111,13 @@ def findDateIndex(ix: DatetimeIndex, search_date: datetime) -> int:
     index: int = -1
     i = 0
     date_t = datetime.today()
-    for i in range(0, len(ix)):
-        date_t = ix[i]
+    for i in range(0, len(date_index)):
+        date_t = date_index[i]
         if type(date_t) == str:
             date_t = datetime.fromisoformat(date_t)
         if date_t >= search_date:
             break
-    if i < len(ix):
+    if i < (len(date_index) - 1):
         if date_t > search_date:
             index = i -1
         else:
@@ -176,7 +152,7 @@ ts_df = chooseAsset(0, start_date_ix, asset_adj_close)
 
 print(f'The asset for the first three month period will be {ts_df.columns[0]}')
 
-last_quarter:pd.DataFrame = etf_close[:][0:start_date_ix].copy()
+last_quarter:pd.DataFrame = equity_adj_close[:][0:start_date_ix].copy()
 last_quarter[shy_adj_close.columns[0]] = shy_adj_close
 
 for col in last_quarter.columns:
@@ -213,33 +189,51 @@ def portfolio_return(holdings: float,
                      bond_percent: float,
                      asset_etfs: pd.DataFrame,
                      bond_etfs: pd.DataFrame,
-                     start_date: datetime,
+                     start_date_i: datetime,
                      end_date: datetime) -> pd.DataFrame:
     asset_holding= holdings * asset_percent
     bond_holding=holdings * bond_percent
     back_delta = relativedelta(months=3)
     forward_delta = relativedelta(months=1)
     date_index = asset_etfs.index
-    start_date_ix = start_date
-    while start_date_ix < end_date:
-        back_start = start_date_ix - back_delta
-        back_end = start_date_ix
-        forward_end = start_date_ix + forward_delta
+    start_date_i = start_date_i
+    portfolio_a = np.zeros(0)
+    last_index = 0
+    while start_date_i <= end_date:
+        # Start of the back-test data
+        back_start = start_date_i - back_delta
+        # End of the back test data
+        back_end = start_date_i
+        # end of the forward data period (e.g., one month)
+        forward_end = start_date_i + forward_delta
         start_ix = findDateIndex(date_index, back_start)
         end_ix = findDateIndex(date_index, back_end)
         forward_ix = findDateIndex(date_index, forward_end)
-        asset_df = chooseAsset(start=start_ix, end=end_ix, asset_set=asset_etfs)
-        asset_month_df = asset_df[:][end_ix:forward_ix]
-        asset_return_df = return_df(asset_month_df)
-        bond_df = chooseAsset(start=start_ix, end=end_ix, asset_set=bond_etfs)
-        bond_month_df = bond_df[:][end_ix:forward_ix]
-        bond_return_df = return_df(bond_month_df)
-        port_asset_a = apply_return(asset_holding, asset_return_df)
-        port_bond_a = apply_return(bond_holding, bond_return_df)
-        port_total_a = port_asset_a + port_bond_a
-        asset_holding = port_total_a[-1] * asset_percent
-        bond_holding = port_total_a[-1] * bond_percent
-        return pd.DataFrame()
+        if start_ix >= 0 and end_ix >= 0 and forward_ix >= 0:
+            # Choose an asset based on the past three months
+            asset_df = chooseAsset(start=start_ix, end=end_ix, asset_set=asset_etfs)
+            asset_month_df = asset_df[:][end_ix:forward_ix]
+            asset_return_df = return_df(asset_month_df)
+            bond_df = chooseAsset(start=start_ix, end=end_ix, asset_set=bond_etfs)
+            bond_month_df = bond_df[:][end_ix:forward_ix]
+            bond_return_df = return_df(bond_month_df)
+            port_asset_a = apply_return(asset_holding, asset_return_df)
+            port_bond_a = apply_return(bond_holding, bond_return_df)
+            port_total_a = port_asset_a + port_bond_a
+            portfolio_a = np.append(portfolio_a, port_total_a)
+            asset_holding = port_total_a[-1] * asset_percent
+            bond_holding = port_total_a[-1] * bond_percent
+            last_index = forward_ix
+            start_date_i = forward_end
+        else:
+            break
+    portfolio_df = pd.DataFrame(portfolio_a)
+    portfolio_df.columns = ['portfolio']
+    index_start = findDateIndex(date_index, start_date)
+    date_index = asset_etfs.index
+    portfolio_index = date_index[index_start:last_index]
+    portfolio_df.set_index(portfolio_index)
+    return portfolio_df
 
 
 holdings = 100000
@@ -252,7 +246,7 @@ portfolio_df: pd.DataFrame = portfolio_return(holdings=holdings,
                                               bond_percent=bond_percent,
                                               asset_etfs=asset_adj_close,
                                               bond_etfs=tlt,
-                                              start_date=start_date,
+                                              start_date_i=start_date,
                                               end_date=end_date)
 
 
