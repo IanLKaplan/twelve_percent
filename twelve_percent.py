@@ -169,18 +169,18 @@ def return_df(time_series_df: pd.DataFrame) -> pd.DataFrame:
     time_series_a: np.array = time_series_df.values
     return_l = simple_return(time_series_a, 1)
     r_df = pd.DataFrame(return_l)
-    index = time_series_df.index
-    r_df.set_index(index[1:len(index)])
+    date_index = time_series_df.index
+    r_df.index = date_index[1:len(date_index)]
     r_df.columns = time_series_df.columns
     return r_df
 
 
 def apply_return(start_val: float, return_df: pd.DataFrame) -> np.array:
-    port_a: np.array = np.zeros( return_df.shape[0])
+    port_a: np.array = np.zeros( return_df.shape[0] + 1)
     port_a[0] = start_val
     return_a = return_df.values
-    for i in range(1, len(return_a)):
-        port_a[i] = port_a[i-1] + port_a[i-1] * return_a[i]
+    for i in range(1, len(port_a)):
+        port_a[i] = port_a[i-1] + port_a[i-1] * return_a[i-1]
     return port_a
 
 
@@ -232,7 +232,7 @@ def portfolio_return(holdings: float,
     index_start = findDateIndex(date_index, start_date)
     date_index = asset_etfs.index
     portfolio_index = date_index[index_start:last_index]
-    portfolio_df.set_index(portfolio_index)
+    portfolio_df.index = portfolio_index
     return portfolio_df
 
 
