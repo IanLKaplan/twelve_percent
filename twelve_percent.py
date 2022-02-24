@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta
 
 import matplotlib
+from numpy import sqrt
 from tabulate import tabulate
 from typing import List, Tuple
 from pandas_datareader import data
@@ -250,5 +251,32 @@ portfolio_df: pd.DataFrame = portfolio_return(holdings=holdings,
                                               end_date=end_date)
 
 
+date_index = equity_adj_close.index
+index_start = findDateIndex(date_index, start_date)
+end_date = portfolio_df.index[-1]
+if type(end_date) == str:
+    end_date = datetime.fromisoformat(end_date)
+index_end = findDateIndex(date_index, end_date)
+spy_df = equity_adj_close['SPY'][index_start:index_end+1]
+spy_df.columns = ['SPY']
+spy_return = return_df(spy_df)
+portfolio_return = return_df(portfolio_df)
+spy_return_a = apply_return(start_val=holdings, return_df=spy_return.copy())
+spy_port = pd.DataFrame(spy_return_a)
+spy_port.columns = ['SPY']
+spy_port.index = spy_df.index
+plot_df = portfolio_df.copy()
+plot_df['SPY'] = spy_port
+
+trading_days = 253
+
+spy_volatility = spy_return.values.std() * sqrt(trading_days)
+port_volatility = portfolio_return.values.std() * sqrt(trading_days)
+
+vol_df = pd.DataFrame([port_volatility, spy_volatility])
+vol_df.columns = ['Volatility']
+vol_df.index = ['Portfolio', 'SPY']
+
+print(tabulate(vol_df, headers=[*vol_df.columns], tablefmt='fancy_grid'))
 
 print("Hi there")
