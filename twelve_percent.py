@@ -279,4 +279,22 @@ vol_df.index = ['Portfolio', 'SPY']
 
 print(tabulate(vol_df, headers=[*vol_df.columns], tablefmt='fancy_grid'))
 
+def period_return(portfolio_df: pd.DataFrame, period: int) -> pd.DataFrame:
+    date_index = portfolio_df.index
+    values_a = portfolio_df.values
+    date_list = list()
+    return_list = list()
+    for i in range(period, len(values_a), period):
+        r = (values_a[i]/values_a[i-period]) - 1
+        d = date_index[i]
+        return_list.append(r)
+        date_list.append(d)
+    return_df = pd.DataFrame(return_list)
+    return_df.index = date_list
+    return return_df
+
+period_return_df = period_return(portfolio_df=portfolio_df, period=trading_days)
+period_return_df.columns = ['Yearly Return']
+
+
 print("Hi there")
