@@ -94,6 +94,22 @@ fixed_income_adjclose = get_market_data(file_name=fixed_income_adjclose_file,
                                 start_date=look_back_date,
                                 end_date=end_date)
 
+# 13-week yearly treasury bond quote
+risk_free_asset = '^IRX'
+rf_file_name = 'rf_adj_close'
+# The bond return is reported as a yearly return percentage
+rf_adj_close = get_market_data(file_name=rf_file_name,
+                                data_col='Adj Close',
+                                symbols=[risk_free_asset],
+                                data_source=data_source,
+                                start_date=start_date,
+                                end_date=end_date)
+
+# The ^IRX interest rate is reported as a yearly percentage rate. Convert this to a daily interest rate
+rf_adj_rate_np: np.array = np.array( rf_adj_close.values ) / 100
+rf_daily_np = ((1 + rf_adj_rate_np) ** (1/360)) - 1
+rf_daily_df: pd.DataFrame = pd.DataFrame( rf_daily_np, index=rf_adj_close.index, columns=['^IRX'])
+
 corr_mat = round(equity_adj_close.corr(), 3)
 
 
@@ -268,13 +284,13 @@ spy_port.index = spy_df.index
 plot_df = portfolio_df.copy()
 plot_df['SPY'] = spy_port
 
-trading_days = 253
+trading_days = 252
 
 spy_volatility = spy_return.values.std() * sqrt(trading_days)
 port_volatility = portfolio_return.values.std() * sqrt(trading_days)
 
 vol_df = pd.DataFrame([port_volatility, spy_volatility])
-vol_df.columns = ['Volatility']
+vol_df.columns = ['Standard Deviation']
 vol_df.index = ['Portfolio', 'SPY']
 
 print(tabulate(vol_df, headers=[*vol_df.columns], tablefmt='fancy_grid'))
@@ -296,5 +312,72 @@ def period_return(portfolio_df: pd.DataFrame, period: int) -> pd.DataFrame:
 period_return_df = period_return(portfolio_df=portfolio_df, period=trading_days)
 period_return_df.columns = ['Yearly Return']
 
+def excess_return_series(asset_return: pd.Series, risk_free: pd.Series) -> pd.DataFrame:
+    excess_ret = asset_return.values.flatten() - risk_free.values.flatten()
+    excess_ret_df = pd.DataFrame(excess_ret, index=asset_return.index)
+    return excess_ret_df
+
+
+def excess_return_df(asset_return: pd.DataFrame, risk_free: pd.Series) -> pd.DataFrame:
+    excess_df: pd.DataFrame = pd.DataFrame()
+    for col in asset_return.columns:
+        e_df = excess_return_series(asset_return[col], risk_free)
+        e_df.columns = [col]
+        excess_df[col] = e_df
+    return excess_df
+
+def calc_sharpe_ratio(asset_return: pd.DataFrame, risk_free: pd.Series, period: int) -> pd.DataFrame:
+    excess_return = excess_return_df(asset_return, risk_free)
+    return_mean: List = []
+    return_stddev: List = []
+    for col in excess_return.columns:
+        mu = np.mean(excess_return[col])
+        std = np.std(excess_return[col])
+        return_mean.append(mu)
+        return_stddev.append(std)
+    # daily Sharpe ratio
+    # https://quant.stackexchange.com/questions/2260/how-to-annualize-sharpe-ratio
+    sharpe_ratio = (np.asarray(return_mean) / np.asarray(return_stddev)) * np.sqrt(period)
+    result_df: pd.DataFrame = pd.DataFrame(sharpe_ratio).transpose()
+    result_df.columns = asset_return.columns
+    ix = asset_return.index
+    dateformat = '%Y-%m-%d'
+    ix_start = datetime.strptime(ix[0], dateformat).date()
+    ix_end = datetime.strptime(ix[len(ix)-1], dateformat).date()
+    index_str = f'{ix_start} : {ix_end}'
+    result_df.index = [ index_str ]
+    return result_df
+
+def adjust_time_series(ts_one_df: pd.DataFrame, ts_two_df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Adjust two DataFrame time series with overlapping date indices so that they
+    are the same length with the same date indices.
+    """
+    ts_one_index = pd.to_datetime(ts_one_df.index)
+    ts_two_index = pd.to_datetime(ts_two_df.index)
+        # filter the close prices
+    matching_dates = ts_one_index.isin( ts_two_index )
+    ts_one_adj = ts_one_df[matching_dates]
+    # filter the rf_prices
+    ts_one_index = pd.to_datetime(ts_one_adj.index)
+    matching_dates = ts_two_index.isin(ts_one_index)
+    ts_two_adj = ts_two_df[matching_dates]
+    return ts_one_adj, ts_two_adj
+
+
+# Interest rates are quoted for the days when banks are open. The number of bank open days is less than
+# the number of trading days. Adjust the portfolio_return series and the interest rate series so that they
+# align.
+rf_daily_adj, portfolio_return_adj = adjust_time_series(rf_daily_df, portfolio_return)
+spy_return_adj, t = adjust_time_series(spy_return, rf_daily_adj)
+
+rf_daily_s = rf_daily_adj.squeeze()
+
+portfolio_sharpe = calc_sharpe_ratio(portfolio_return_adj, rf_daily_s, trading_days)
+spy_sharpe = calc_sharpe_ratio(spy_return_adj, rf_daily_s, trading_days)
+
+sharpe_df = pd.concat([portfolio_sharpe, spy_sharpe], axis=1)
+
+print(tabulate(sharpe_df, headers=[*sharpe_df.columns], tablefmt='fancy_grid'))
 
 print("Hi there")
