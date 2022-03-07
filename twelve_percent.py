@@ -341,9 +341,12 @@ def calc_sharpe_ratio(asset_return: pd.DataFrame, risk_free: pd.Series, period: 
     result_df: pd.DataFrame = pd.DataFrame(sharpe_ratio).transpose()
     result_df.columns = asset_return.columns
     ix = asset_return.index
-    dateformat = '%Y-%m-%d'
-    ix_start = datetime.strptime(ix[0], dateformat).date()
-    ix_end = datetime.strptime(ix[len(ix)-1], dateformat).date()
+    ix_start = ix[0]
+    ix_end = ix[-1]
+    if type(ix_start) == str:
+        dateformat = '%Y-%m-%d'
+        ix_start = datetime.strptime(ix_start, dateformat).date()
+        ix_end = datetime.strptime(ix_end, dateformat).date()
     index_str = f'{ix_start} : {ix_end}'
     result_df.index = [ index_str ]
     return result_df
@@ -379,5 +382,31 @@ spy_sharpe = calc_sharpe_ratio(spy_return_adj, rf_daily_s, trading_days)
 sharpe_df = pd.concat([portfolio_sharpe, spy_sharpe], axis=1)
 
 print(tabulate(sharpe_df, headers=[*sharpe_df.columns], tablefmt='fancy_grid'))
+
+def period_return(portfolio_df: pd.DataFrame, period: int) -> pd.DataFrame:
+    date_index = portfolio_df.index
+    values_a = portfolio_df.values
+    date_list = list()
+    return_list = list()
+    for i in range(period, len(values_a), period):
+        r = (values_a[i]/values_a[i-period]) - 1
+        d = date_index[i]
+        return_list.append(r)
+        date_list.append(d)
+    return_df = pd.DataFrame(return_list)
+    return_df.index = date_list
+    return return_df
+
+period_return_df = period_return(portfolio_df=portfolio_df, period=trading_days)
+spy_period_return_df = period_return(portfolio_df=spy_df, period=trading_days)
+portfolio_spy_return_df = pd.concat([period_return_df, spy_period_return_df], axis=1)
+portfolio_spy_return_df.columns = ['ETF Rotation', 'SPY']
+portfolio_spy_return_df = round(portfolio_spy_return_df * 100, 2)
+
+print(tabulate(portfolio_spy_return_df, headers=[*portfolio_spy_return_df.columns], tablefmt='fancy_grid'))
+
+average_return_df = pd.DataFrame(portfolio_spy_return_df.mean()).transpose()
+
+print(tabulate(average_return_df, headers=[*average_return_df.columns], tablefmt='fancy_grid'))
 
 print("Hi there")
