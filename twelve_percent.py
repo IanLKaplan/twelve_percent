@@ -206,14 +206,16 @@ def portfolio_return(holdings: float,
                      bond_percent: float,
                      asset_etfs: pd.DataFrame,
                      bond_etfs: pd.DataFrame,
-                     start_date_i: datetime,
-                     end_date: datetime) -> pd.DataFrame:
+                     start_date: datetime,
+                     end_date: datetime,
+                     year_rebalance: bool) -> pd.DataFrame:
     asset_holding= holdings * asset_percent
     bond_holding=holdings * bond_percent
     back_delta = relativedelta(months=3)
     forward_delta = relativedelta(months=1)
     date_index = asset_etfs.index
-    start_date_i = start_date_i
+    start_date_i = start_date
+    current_year = start_date.year
     portfolio_a = np.zeros(0)
     last_index = 0
     while start_date_i <= end_date:
@@ -242,6 +244,16 @@ def portfolio_return(holdings: float,
             bond_holding = port_total_a[-1] * bond_percent
             last_index = forward_ix
             start_date_i = forward_end
+            if year_rebalance:
+                asset_holding = port_asset_a[-1]
+                bond_holding = port_bond_a[-1]
+                if start_date_i.year > current_year:
+                    asset_holding = port_total_a[-1] * asset_percent
+                    bond_holding = port_total_a[-1] * bond_percent
+                    current_year = start_date_i.year
+            else:
+                asset_holding = port_total_a[-1] * asset_percent
+                bond_holding = port_total_a[-1] * bond_percent
         else:
             break
     portfolio_df = pd.DataFrame(portfolio_a)
@@ -263,8 +275,9 @@ portfolio_df: pd.DataFrame = portfolio_return(holdings=holdings,
                                               bond_percent=bond_percent,
                                               asset_etfs=asset_adj_close,
                                               bond_etfs=tlt,
-                                              start_date_i=start_date,
-                                              end_date=end_date)
+                                              start_date=start_date,
+                                              end_date=end_date,
+                                              year_rebalance=False)
 
 
 date_index = equity_adj_close.index
