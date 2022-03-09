@@ -134,11 +134,10 @@ def findDateIndex(date_index: DatetimeIndex, search_date: datetime) -> int:
             date_t = datetime.fromisoformat(date_t)
         if date_t >= search_date:
             break
-    if i < (len(date_index) - 1):
-        if date_t > search_date:
-            index = i -1
-        else:
-            index = i
+    if date_t > search_date:
+        index = i - 1
+    else:
+        index = i
     return index
 
 
@@ -291,27 +290,54 @@ portfolio_df, assets_df = portfolio_return(holdings=holdings,
                                               end_date=end_date,
                                               year_rebalance=False)
 
-date_index = equity_adj_close.index
-index_start = findDateIndex(date_index, start_date)
-end_date = portfolio_df.index[-1]
-if type(end_date) == str:
-    end_date = datetime.fromisoformat(end_date)
-index_end = findDateIndex(date_index, end_date)
-spy_df = equity_adj_close['SPY'][index_start:index_end+1]
-spy_df.columns = ['SPY']
-spy_return = return_df(spy_df)
-portfolio_return = return_df(portfolio_df)
-spy_return_a = apply_return(start_val=holdings, return_df=spy_return.copy())
-spy_port = pd.DataFrame(spy_return_a)
-spy_port.columns = ['SPY']
-spy_port.index = spy_df.index
-plot_df = portfolio_df.copy()
-plot_df['SPY'] = spy_port
+
+def build_plot_data(holdings: float, portfolio_df: pd.DataFrame, spy_df: pd.DataFrame) -> pd.DataFrame:
+    port_start_date = portfolio_df.index[0]
+    if type(port_start_date) == str:
+        port_start_date = datetime.fromisoformat(port_start_date)
+    port_end_date = portfolio_df.index[-1]
+    if type(port_end_date) == str:
+        port_end_date = datetime.fromisoformat(port_end_date)
+    spy_index = spy_df.index
+    spy_start_ix = findDateIndex(spy_index, port_start_date)
+    spy_end_ix = findDateIndex(spy_index, port_end_date)
+    spy_df = pd.DataFrame(spy_df[:][spy_start_ix:spy_end_ix+1])
+    spy_return = return_df(spy_df)
+    spy_return_a = apply_return(start_val=holdings, return_df=spy_return.copy())
+    spy_port = pd.DataFrame(spy_return_a)
+    spy_port.columns = ['SPY']
+    spy_port.index = spy_df.index
+    plot_df = portfolio_df.copy()
+    plot_df['SPY'] = spy_port
+    return plot_df
+
+
+def adjust_time_series(ts_one_df: pd.DataFrame, ts_two_df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Adjust two DataFrame time series with overlapping date indices so that they
+    are the same length with the same date indices.
+    """
+    ts_one_index = pd.to_datetime(ts_one_df.index)
+    ts_two_index = pd.to_datetime(ts_two_df.index)
+        # filter the close prices
+    matching_dates = ts_one_index.isin( ts_two_index )
+    ts_one_adj = ts_one_df[matching_dates]
+    # filter the rf_prices
+    ts_one_index = pd.to_datetime(ts_one_adj.index)
+    matching_dates = ts_two_index.isin(ts_one_index)
+    ts_two_adj = ts_two_df[matching_dates]
+    return ts_one_adj, ts_two_adj
+
+
+spy_df, portfolio_df = adjust_time_series(pd.DataFrame(equity_adj_close['SPY']), portfolio_df)
+plot_df = build_plot_data(holdings, portfolio_df, spy_df)
 
 trading_days = 252
 
-spy_volatility = spy_return.values.std() * sqrt(trading_days)
-port_volatility = portfolio_return.values.std() * sqrt(trading_days)
+spy_return = return_df(spy_df)
+port_return = return_df(portfolio_df)
+spy_volatility = round(spy_return.values.std() * sqrt(trading_days) * 100, 2)
+port_volatility = round(port_return.values.std() * sqrt(trading_days) * 100, 2)
 
 vol_df = pd.DataFrame([port_volatility, spy_volatility])
 vol_df.columns = ['Standard Deviation']
@@ -375,27 +401,11 @@ def calc_sharpe_ratio(asset_return: pd.DataFrame, risk_free: pd.Series, period: 
     result_df.index = [ index_str ]
     return result_df
 
-def adjust_time_series(ts_one_df: pd.DataFrame, ts_two_df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """
-    Adjust two DataFrame time series with overlapping date indices so that they
-    are the same length with the same date indices.
-    """
-    ts_one_index = pd.to_datetime(ts_one_df.index)
-    ts_two_index = pd.to_datetime(ts_two_df.index)
-        # filter the close prices
-    matching_dates = ts_one_index.isin( ts_two_index )
-    ts_one_adj = ts_one_df[matching_dates]
-    # filter the rf_prices
-    ts_one_index = pd.to_datetime(ts_one_adj.index)
-    matching_dates = ts_two_index.isin(ts_one_index)
-    ts_two_adj = ts_two_df[matching_dates]
-    return ts_one_adj, ts_two_adj
-
 
 # Interest rates are quoted for the days when banks are open. The number of bank open days is less than
 # the number of trading days. Adjust the portfolio_return series and the interest rate series so that they
 # align.
-rf_daily_adj, portfolio_return_adj = adjust_time_series(rf_daily_df, portfolio_return)
+rf_daily_adj, portfolio_return_adj = adjust_time_series(rf_daily_df, port_return)
 spy_return_adj, t = adjust_time_series(spy_return, rf_daily_adj)
 
 rf_daily_s = rf_daily_adj.squeeze()
@@ -421,8 +431,8 @@ def period_return(portfolio_df: pd.DataFrame, period: int) -> pd.DataFrame:
     return_df.index = date_list
     return return_df
 
-period_return_df = period_return(portfolio_df=portfolio_df, period=trading_days)
-spy_period_return_df = period_return(portfolio_df=spy_df, period=trading_days)
+spy_adj_df, portfolio_adj_df = adjust_time_series(spy_df, portfolio_df)
+spy_period_return_df = period_return(portfolio_df=spy_adj_df, period=trading_days)
 portfolio_spy_return_df = pd.concat([period_return_df, spy_period_return_df], axis=1)
 portfolio_spy_return_df.columns = ['ETF Rotation', 'SPY']
 portfolio_spy_return_df = round(portfolio_spy_return_df * 100, 2)
