@@ -136,7 +136,7 @@ def findDateIndex(date_index: DatetimeIndex, search_date: datetime) -> int:
             break
     if date_t > search_date:
         index = i - 1
-    else:
+    elif date_t == search_date:
         index = i
     return index
 
