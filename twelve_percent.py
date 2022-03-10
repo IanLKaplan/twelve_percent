@@ -417,20 +417,6 @@ sharpe_df = pd.concat([portfolio_sharpe, spy_sharpe], axis=1)
 
 print(tabulate(sharpe_df, headers=[*sharpe_df.columns], tablefmt='fancy_grid'))
 
-def period_return(portfolio_df: pd.DataFrame, period: int) -> pd.DataFrame:
-    date_index = portfolio_df.index
-    values_a = portfolio_df.values
-    date_list = list()
-    return_list = list()
-    for i in range(period, len(values_a), period):
-        r = (values_a[i]/values_a[i-period]) - 1
-        d = date_index[i]
-        return_list.append(r)
-        date_list.append(d)
-    return_df = pd.DataFrame(return_list)
-    return_df.index = date_list
-    return return_df
-
 spy_adj_df, portfolio_adj_df = adjust_time_series(spy_df, portfolio_df)
 spy_period_return_df = period_return(portfolio_df=spy_adj_df, period=trading_days)
 portfolio_spy_return_df = pd.concat([period_return_df, spy_period_return_df], axis=1)
@@ -442,5 +428,7 @@ print(tabulate(portfolio_spy_return_df, headers=[*portfolio_spy_return_df.column
 average_return_df = pd.DataFrame(portfolio_spy_return_df.mean()).transpose()
 
 print(tabulate(average_return_df, headers=[*average_return_df.columns], tablefmt='fancy_grid'))
+
+limited_asset_set_df = asset_adj_close[['SPY', 'SHY']]
 
 print("Hi there")
