@@ -429,6 +429,39 @@ average_return_df = pd.DataFrame(portfolio_spy_return_df.mean()).transpose()
 
 print(tabulate(average_return_df, headers=[*average_return_df.columns], tablefmt='fancy_grid'))
 
-limited_asset_set_df = asset_adj_close[['SPY', 'SHY']]
+new_equity_etfs = ['XLE', 'VUG', 'VBR', 'FXZ',
+                   'VDC', 'VCR', 'VFH', 'VGT',
+                   'VHT', 'SOXX']
+
+new_bond_etfs = ['SPIP', 'BIV', 'IEF', 'VYM']
+
+short_etfs = ['SDS', 'RWM']
+
+new_etf_adjclose_file = 'new_equity_etf_adjclose'
+new_equity_adj_close = get_market_data(file_name=new_etf_adjclose_file,
+                                data_col='Adj Close',
+                                symbols=new_equity_etfs,
+                                data_source=data_source,
+                                start_date=look_back_date,
+                                end_date=end_date)
+
+new_bond_adjclose_file = 'new_bond_etf_adjclose'
+new_bond_adj_close = get_market_data(file_name=new_bond_adjclose_file,
+                                data_col='Adj Close',
+                                symbols=new_bond_etfs,
+                                data_source=data_source,
+                                start_date=look_back_date,
+                                end_date=end_date)
+
+short_etf_adjclose_file = 'short_etf_adjclose'
+short_etf_adj_close = get_market_data(file_name=short_etf_adjclose_file,
+                                data_col='Adj Close',
+                                symbols=short_etfs,
+                                data_source=data_source,
+                                start_date=look_back_date,
+                                end_date=end_date)
+
+new_etf_set = pd.concat([new_equity_adj_close, equity_adj_close, shy_adj_close], axis=1)
+new_bond_set = pd.concat([new_bond_adj_close, fixed_income_adjclose['TLT']], axis=1)
 
 print("Hi there")
