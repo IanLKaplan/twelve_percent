@@ -464,4 +464,80 @@ short_etf_adj_close = get_market_data(file_name=short_etf_adjclose_file,
 new_etf_set = pd.concat([new_equity_adj_close, equity_adj_close, shy_adj_close], axis=1)
 new_bond_set = pd.concat([new_bond_adj_close, fixed_income_adjclose['TLT']], axis=1)
 
+def portfolio_income(holdings: float,
+                     asset_percent: float,
+                     bond_percent: float,
+                     asset_etfs: pd.DataFrame,
+                     bond_etfs: pd.DataFrame,
+                     start_date: datetime,
+                     end_date: datetime,
+                     withdraw_percent: float) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    asset_holding= holdings * asset_percent
+    bond_holding=holdings * bond_percent
+    back_delta = relativedelta(months=3)
+    forward_delta = relativedelta(months=1)
+    date_index = asset_etfs.index
+    start_date_i = start_date
+    current_year = start_date.year
+    portfolio_a = np.zeros(0)
+    last_index = 0
+    cash_l = list()
+    year_index_l = list()
+    while start_date_i <= end_date:
+        # Start of the back-test data
+        back_start = start_date_i - back_delta
+        # End of the back test data
+        back_end = start_date_i
+        # end of the forward data period (e.g., one month)
+        forward_end = start_date_i + forward_delta
+        start_ix = findDateIndex(date_index, back_start)
+        end_ix = findDateIndex(date_index, back_end)
+        forward_ix = findDateIndex(date_index, forward_end)
+        if start_ix >= 0 and end_ix >= 0 and forward_ix >= 0:
+            # Choose an asset based on the past three months
+            asset_df = chooseAsset(start=start_ix, end=end_ix, asset_set=asset_etfs)
+            asset_month_df = asset_df[:][end_ix:forward_ix]
+            asset_return_df = return_df(asset_month_df)
+            bond_df = chooseAsset(start=start_ix, end=end_ix, asset_set=bond_etfs)
+            bond_month_df = bond_df[:][end_ix:forward_ix]
+            bond_return_df = return_df(bond_month_df)
+            port_asset_a = apply_return(asset_holding, asset_return_df)
+            port_bond_a = apply_return(bond_holding, bond_return_df)
+            port_total_a = port_asset_a + port_bond_a
+            last_index = forward_ix
+            start_date_i = forward_end
+            if start_date_i.year > current_year:
+                current_port_total = port_total_a[-1]
+                withdrawal =  current_port_total * withdraw_percent
+                if (current_port_total - withdrawal) >= holdings:
+                    port_total_a[-1] = current_port_total - withdrawal
+                    cash_l.append(withdrawal)
+                    month_index = asset_month_df.index[0]
+                    year_index_l.append(month_index)
+                current_year = start_date_i.year
+            portfolio_a = np.append(portfolio_a, port_total_a)
+            asset_holding = port_total_a[-1] * asset_percent
+            bond_holding = port_total_a[-1] * bond_percent
+        else:
+            break
+    portfolio_df = pd.DataFrame(portfolio_a)
+    portfolio_df.columns = ['portfolio']
+    index_start = findDateIndex(date_index, start_date)
+    date_index = asset_etfs.index
+    portfolio_index = date_index[index_start:last_index]
+    portfolio_df.index = portfolio_index
+    cash_df = pd.DataFrame(cash_l)
+    cash_df.index = year_index_l
+    return portfolio_df, cash_df
+
+
+portfolio_income_df, cash_df = portfolio_income(holdings=holdings,
+                                         asset_percent=equity_percent,
+                                         bond_percent=bond_percent,
+                                         asset_etfs=asset_adj_close,
+                                         bond_etfs=fixed_income_adjclose,
+                                         start_date=start_date,
+                                         end_date=end_date,
+                                         withdraw_percent=0.10)
+
 print("Hi there")
