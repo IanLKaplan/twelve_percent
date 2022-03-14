@@ -510,9 +510,33 @@ three_month_df, one_month_df = calculate_return_series(close_prices_df=all_etf_a
 return_corr = three_month_df.corrwith(one_month_df)
 return_corr.sort_values(ascending=False, inplace=True)
 return_corr_df = pd.DataFrame(return_corr)
+
 print(tabulate(return_corr_df, headers=['Correlation'], tablefmt='fancy_grid'))
 
-print(return_corr)
+etf_corr_set = return_corr_df[:][return_corr_df >= return_corr_df.loc['SPY']].dropna()
+high_corr_etfs = all_etf_adj_close[etf_corr_set.index]
+
+high_corr_portfolio_df, assets_df = portfolio_return(holdings=holdings,
+                                              asset_percent=equity_percent,
+                                              bond_percent=bond_percent,
+                                              asset_etfs=high_corr_etfs,
+                                              bond_etfs=fixed_income_adjclose,
+                                              start_date=start_date,
+                                              end_date=end_date,
+                                              year_rebalance=False)
+
+etf_corr_set = return_corr_df[:][return_corr_df >= return_corr_df.loc['SPY']].dropna()
+high_corr_etfs = all_etf_adj_close[etf_corr_set.index]
+
+period_return_df = period_return(portfolio_df=high_corr_portfolio_df, period=trading_days)
+
+port_return = return_df(high_corr_portfolio_df)
+
+port_volatility = round(port_return.values.std() * sqrt(trading_days) * 100, 2)
+
+stats_df = pd.DataFrame([round(period_return_df.values.mean() * 100, 2), port_volatility]).transpose()
+print(tabulate(stats_df, headers=['Average Return', 'StdDev'], tablefmt='fancy_grid'))
+
 
 def portfolio_income(holdings: float,
                      asset_percent: float,
