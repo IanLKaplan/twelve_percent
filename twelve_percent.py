@@ -464,6 +464,56 @@ short_etf_adj_close = get_market_data(file_name=short_etf_adjclose_file,
 new_etf_set = pd.concat([new_equity_adj_close, equity_adj_close, shy_adj_close], axis=1)
 new_bond_set = pd.concat([new_bond_adj_close, fixed_income_adjclose['TLT']], axis=1)
 
+
+def calculate_return_series(close_prices_df: pd.DataFrame,
+                            start_date: datetime) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    :param close_prices_df: a DataFrame of close prices where all of the data aligns on date
+    :param start_date: the start date to use in calculating the returns
+    :return: a Series with the past three month return and the return for the next month
+    """
+    date_index = close_prices_df.index
+    end_date = date_index[-1]
+    end_date_t = end_date
+    if type(end_date) == str:
+        end_date_t = datetime.fromisoformat(end_date)
+    back_delta = relativedelta(months=3)
+    forward_delta = relativedelta(months=1)
+    start_date_i = start_date
+    three_month_return_df = pd.DataFrame()
+    one_month_return_df = pd.DataFrame()
+    while start_date_i <= end_date_t:
+        # Start of the back-test data
+        back_start = start_date_i - back_delta
+        # End of the back test data
+        back_end = start_date_i
+        # end of the forward data period (e.g., one month)
+        forward_end = start_date_i + forward_delta
+        start_ix = findDateIndex(date_index, back_start)
+        end_ix = findDateIndex(date_index, back_end)
+        forward_ix = findDateIndex(date_index, forward_end)
+        if start_ix >= 0 and end_ix >= 0 and forward_ix >= 0:
+            three_month_a = (close_prices_df[:][start_ix:start_ix+1].values / close_prices_df[:][end_ix:end_ix+1].values) - 1
+            three_month_return_df = pd.concat([three_month_return_df, pd.DataFrame(three_month_a)])
+            one_month_a = (close_prices_df[:][forward_ix:forward_ix+1].values / close_prices_df[:][end_ix:end_ix+1].values) - 1
+            one_month_return_df = pd.concat([one_month_return_df, pd.DataFrame(one_month_a)])
+        else:
+            break
+        start_date_i = forward_end
+    three_month_return_df.columns = close_prices_df.columns
+    one_month_return_df.columns = close_prices_df.columns
+    return three_month_return_df, one_month_return_df
+
+
+all_etf_adj_close = pd.concat([equity_adj_close, new_equity_adj_close, short_etf_adj_close], axis=1)
+three_month_df, one_month_df = calculate_return_series(close_prices_df=all_etf_adj_close, start_date=start_date)
+return_corr = three_month_df.corrwith(one_month_df)
+return_corr.sort_values(ascending=False, inplace=True)
+return_corr_df = pd.DataFrame(return_corr)
+print(tabulate(return_corr_df, headers=['Correlation'], tablefmt='fancy_grid'))
+
+print(return_corr)
+
 def portfolio_income(holdings: float,
                      asset_percent: float,
                      bond_percent: float,
