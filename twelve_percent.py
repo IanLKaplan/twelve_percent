@@ -506,14 +506,22 @@ def calculate_return_series(close_prices_df: pd.DataFrame,
 
 
 all_etf_adj_close = pd.concat([equity_adj_close, new_equity_adj_close, short_etf_adj_close], axis=1)
-three_month_df, one_month_df = calculate_return_series(close_prices_df=all_etf_adj_close, start_date=start_date)
+corr_end_date = start_date + relativedelta(years=8)
+date_index = all_etf_adj_close.index
+corr_end_ix = findDateIndex(date_index, corr_end_date)
+all_etf_adj_close_trunc = all_etf_adj_close[:][0:corr_end_ix+1]
+three_month_df, one_month_df = calculate_return_series(close_prices_df=all_etf_adj_close_trunc, start_date=start_date)
 return_corr = three_month_df.corrwith(one_month_df)
 return_corr.sort_values(ascending=False, inplace=True)
+return_corr_a = return_corr.values
+# https://stats.stackexchange.com/questions/73621/standard-error-from-correlation-coefficient
+n = three_month_df.shape[0]
+corr_se = (1 - return_corr_a**2)/sqrt(n)
 return_corr_df = pd.DataFrame(return_corr)
 
 print(tabulate(return_corr_df, headers=['Correlation'], tablefmt='fancy_grid'))
 
-etf_corr_set = return_corr_df[:][return_corr_df >= return_corr_df.loc['SPY']].dropna()
+etf_corr_set = return_corr_df[:][return_corr_df >= 0.10].dropna()
 high_corr_etfs = all_etf_adj_close[etf_corr_set.index]
 
 high_corr_portfolio_df, assets_df = portfolio_return(holdings=holdings,
@@ -521,12 +529,33 @@ high_corr_portfolio_df, assets_df = portfolio_return(holdings=holdings,
                                               bond_percent=bond_percent,
                                               asset_etfs=high_corr_etfs,
                                               bond_etfs=fixed_income_adjclose,
-                                              start_date=start_date,
+                                              start_date=corr_end_date,
                                               end_date=end_date,
                                               year_rebalance=False)
 
-etf_corr_set = return_corr_df[:][return_corr_df >= return_corr_df.loc['SPY']].dropna()
-high_corr_etfs = all_etf_adj_close[etf_corr_set.index]
+twelve_percent_df,  assets_df = portfolio_return(holdings=holdings,
+                                              asset_percent=equity_percent,
+                                              bond_percent=bond_percent,
+                                              asset_etfs=asset_adj_close,
+                                              bond_etfs=fixed_income_adjclose,
+                                              start_date=corr_end_date,
+                                              end_date=end_date,
+                                              year_rebalance=False)
+
+
+spy_df = pd.DataFrame(equity_adj_close['SPY'])
+spy_df_adj, t = adjust_time_series(spy_df, high_corr_portfolio_df)
+
+plot_df = build_plot_data(holdings, high_corr_portfolio_df, spy_df_adj)
+plot_df['twelve percent'] = twelve_percent_df
+plot_df.columns = ['Correlation', 'SPY', 'twelve percent']
+
+three_month_df, one_month_df = calculate_return_series(close_prices_df=all_etf_adj_close, start_date=start_date)
+return_corr = three_month_df.corrwith(one_month_df)
+return_corr.sort_values(ascending=False, inplace=True)
+return_corr_df = pd.DataFrame(return_corr)
+
+print(tabulate(return_corr_df, headers=['Correlation'], tablefmt='fancy_grid'))
 
 period_return_df = period_return(portfolio_df=high_corr_portfolio_df, period=trading_days)
 
