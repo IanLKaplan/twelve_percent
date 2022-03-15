@@ -523,6 +523,8 @@ print(tabulate(return_corr_df, headers=['Correlation'], tablefmt='fancy_grid'))
 
 etf_corr_set = return_corr_df[:][return_corr_df >= 0.10].dropna()
 high_corr_etfs = all_etf_adj_close[etf_corr_set.index]
+if not 'SHY' in high_corr_etfs.columns:
+    high_corr_etfs = pd.concat([high_corr_etfs, shy_adj_close], axis=1)
 
 high_corr_portfolio_df, assets_df = portfolio_return(holdings=holdings,
                                               asset_percent=equity_percent,
