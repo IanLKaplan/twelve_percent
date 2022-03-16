@@ -177,12 +177,7 @@ def chooseAsset(start: int, end: int, asset_set: pd.DataFrame) -> pd.DataFrame:
 start_date_ix = findDateIndex(asset_adj_close.index, start_date)
 ts_df = chooseAsset(0, start_date_ix, asset_adj_close)
 
-print(f'The asset for the first three month period will be {ts_df.columns[0]}')\
-
-last_quarter:pd.DataFrame = asset_adj_close[:][0:start_date_ix].copy()
-
-for col in last_quarter.columns:
-    last_quarter[col] = last_quarter[col] - last_quarter[col][0]
+print(f'The asset for the first three month period will be {ts_df.columns[0]}')
 
 def simple_return(time_series: np.array, period: int) -> List :
     return list(((time_series[i]/time_series[i-period]) - 1.0 for i in range(period, len(time_series), period)))
@@ -197,6 +192,18 @@ def return_df(time_series_df: pd.DataFrame) -> pd.DataFrame:
     r_df.index = date_index[1:len(date_index)]
     r_df.columns = time_series_df.columns
     return r_df
+
+last_quarter:pd.DataFrame = asset_adj_close[:][0:start_date_ix].copy()
+
+def percent_return(time_series: pd.Series) -> pd.Series:
+    return list(((time_series[i] / time_series[0]) - 1.0 for i in range(0, len(time_series))))
+
+quarter_return_df = pd.DataFrame()
+for col in last_quarter.columns:
+    col_series = percent_return(last_quarter[col])
+    quarter_return_df[col] = pd.DataFrame(col_series)
+
+quarter_return_df = round(quarter_return_df * 100, 2)
 
 
 def apply_return(start_val: float, return_df: pd.DataFrame) -> np.array:
