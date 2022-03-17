@@ -1,24 +1,17 @@
 
 from datetime import datetime, timedelta
 
-import matplotlib
 from numpy import sqrt
 from tabulate import tabulate
 from typing import List, Tuple
 from pandas_datareader import data
-import pypfopt as pyopt
-from pypfopt import expected_returns
-from pypfopt import risk_models
-from pypfopt import plotting, CLA
 import matplotlib.pyplot as plt
-import scipy.stats as stats
 import pandas as pd
 from pandas.core.indexes.datetimes import DatetimeIndex
 from dateutil.relativedelta import relativedelta
 import numpy as np
 from pathlib import Path
 import tempfile
-import quantstats as qs
 
 pd.options.mode.chained_assignment = 'raise'
 
@@ -116,6 +109,7 @@ rf_daily_df: pd.DataFrame = pd.DataFrame( rf_daily_np, index=rf_adj_close.index,
 corr_mat = round(equity_adj_close.corr(), 3)
 
 print(tabulate(corr_mat, headers=[*corr_mat.columns], tablefmt='fancy_grid'))
+
 
 def findDateIndex(date_index: DatetimeIndex, search_date: datetime) -> int:
     '''
