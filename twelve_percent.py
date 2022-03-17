@@ -173,11 +173,11 @@ ts_df = chooseAsset(0, start_date_ix, asset_adj_close)
 
 print(f'The asset for the first three month period will be {ts_df.columns[0]}')
 
-def simple_return(time_series: np.array, period: int) -> List :
-    return list(((time_series[i]/time_series[i-period]) - 1.0 for i in range(period, len(time_series), period)))
-
-
 def return_df(time_series_df: pd.DataFrame) -> pd.DataFrame:
+    def simple_return(time_series: np.array, period: int) -> List :
+        return list(((time_series[i]/time_series[i-period]) - 1.0 for i in range(period, len(time_series), period)))
+
+
     r_df: pd.DataFrame = pd.DataFrame()
     time_series_a: np.array = time_series_df.values
     return_l = simple_return(time_series_a, 1)
@@ -187,17 +187,25 @@ def return_df(time_series_df: pd.DataFrame) -> pd.DataFrame:
     r_df.columns = time_series_df.columns
     return r_df
 
-last_quarter:pd.DataFrame = asset_adj_close[:][0:start_date_ix].copy()
 
-def percent_return(time_series: pd.Series) -> pd.Series:
-    return list(((time_series[i] / time_series[0]) - 1.0 for i in range(0, len(time_series))))
+def percent_return_df(start_date: datetime, end_date: datetime, prices_df: pd.DataFrame) -> pd.DataFrame:
+    def percent_return(time_series: pd.Series) -> pd.Series:
+        return list(((time_series[i] / time_series[0]) - 1.0 for i in range(0, len(time_series))))
 
-quarter_return_df = pd.DataFrame()
-for col in last_quarter.columns:
-    col_series = percent_return(last_quarter[col])
-    quarter_return_df[col] = pd.DataFrame(col_series)
 
-quarter_return_df = round(quarter_return_df * 100, 2)
+    date_index = prices_df.index
+    start_ix = findDateIndex(date_index, start_date)
+    end_ix = findDateIndex(date_index, end_date)
+    period_df = prices_df[:][start_ix:end_ix+1]
+    period_return_df = pd.DataFrame()
+    for col in period_df.columns:
+        return_series = percent_return(period_df[col])
+        period_return_df[col] = return_series
+    period_return_df.index = period_df.index
+    return_percent_df = round(period_return_df * 100, 2)
+    return return_percent_df
+
+percent_ret_df = percent_return_df(start_date=look_back_date, end_date=start_date, prices_df=asset_adj_close)
 
 
 def apply_return(start_val: float, return_df: pd.DataFrame) -> np.array:
@@ -228,6 +236,7 @@ def portfolio_return(holdings: float,
     bond_asset_l = list()
     equity_asset_l = list()
     month_index_l = list()
+    date_index_l = list()
     while start_date_i <= end_date:
         # Start of the back-test data
         back_start = start_date_i - back_delta
@@ -250,6 +259,8 @@ def portfolio_return(holdings: float,
             bond_asset_l.append(bond_asset)
             month_index = asset_month_df.index[0]
             month_index_l.append(month_index)
+            cur_month_index = asset_month_df.index
+            date_index_l.extend(cur_month_index)
             asset_return_df = return_df(asset_month_df)
             bond_return_df = return_df(bond_month_df)
             port_asset_a = apply_return(asset_holding, asset_return_df)
@@ -264,10 +275,7 @@ def portfolio_return(holdings: float,
             break
     portfolio_df = pd.DataFrame(portfolio_a)
     portfolio_df.columns = ['portfolio']
-    index_start = findDateIndex(date_index, start_date)
-    date_index = asset_etfs.index
-    portfolio_index = date_index[index_start:last_index]
-    portfolio_df.index = portfolio_index
+    portfolio_df.index = date_index_l
     choices_df = pd.DataFrame()
     choices_df['Equity'] = pd.DataFrame(equity_asset_l)
     choices_df['Bond'] = pd.DataFrame(bond_asset_l)
