@@ -215,8 +215,7 @@ def portfolio_return(holdings: float,
                      asset_etfs: pd.DataFrame,
                      bond_etfs: pd.DataFrame,
                      start_date: datetime,
-                     end_date: datetime,
-                     year_rebalance: bool) -> Tuple[pd.DataFrame, pd.DataFrame]:
+                     end_date: datetime) -> Tuple[pd.DataFrame, pd.DataFrame]:
     asset_holding= holdings * asset_percent
     bond_holding=holdings * bond_percent
     back_delta = relativedelta(months=3)
@@ -243,32 +242,24 @@ def portfolio_return(holdings: float,
             # Choose an asset based on the past three months
             asset_df = chooseAsset(start=start_ix, end=end_ix, asset_set=asset_etfs)
             asset_month_df = asset_df[:][end_ix:forward_ix]
-            asset_return_df = return_df(asset_month_df)
             bond_df = chooseAsset(start=start_ix, end=end_ix, asset_set=bond_etfs)
+            bond_month_df = bond_df[:][end_ix:forward_ix]
             bond_asset = bond_df.columns[0]
             equity_asset = asset_df.columns[0]
-            month_index = asset_month_df.index[0]
-            bond_asset_l.append(bond_asset)
             equity_asset_l.append(equity_asset)
+            bond_asset_l.append(bond_asset)
+            month_index = asset_month_df.index[0]
             month_index_l.append(month_index)
-            bond_month_df = bond_df[:][end_ix:forward_ix]
+            asset_return_df = return_df(asset_month_df)
             bond_return_df = return_df(bond_month_df)
             port_asset_a = apply_return(asset_holding, asset_return_df)
             port_bond_a = apply_return(bond_holding, bond_return_df)
             port_total_a = port_asset_a + port_bond_a
             portfolio_a = np.append(portfolio_a, port_total_a)
+            asset_holding = port_total_a[-1] * asset_percent
+            bond_holding = port_total_a[-1] * bond_percent
             last_index = forward_ix
             start_date_i = forward_end
-            if year_rebalance:
-                asset_holding = port_asset_a[-1]
-                bond_holding = port_bond_a[-1]
-                if start_date_i.year > current_year:
-                    asset_holding = port_total_a[-1] * asset_percent
-                    bond_holding = port_total_a[-1] * bond_percent
-                    current_year = start_date_i.year
-            else:
-                asset_holding = port_total_a[-1] * asset_percent
-                bond_holding = port_total_a[-1] * bond_percent
         else:
             break
     portfolio_df = pd.DataFrame(portfolio_a)
@@ -295,8 +286,7 @@ portfolio_df, assets_df = portfolio_return(holdings=holdings,
                                               asset_etfs=asset_adj_close,
                                               bond_etfs=tlt,
                                               start_date=start_date,
-                                              end_date=end_date,
-                                              year_rebalance=False)
+                                              end_date=end_date)
 
 
 def build_plot_data(holdings: float, portfolio_df: pd.DataFrame, spy_df: pd.DataFrame) -> pd.DataFrame:
@@ -440,8 +430,7 @@ portfolio_df, assets_df = portfolio_return(holdings=holdings,
                                               asset_etfs=asset_adj_close,
                                               bond_etfs=fixed_income_adjclose,
                                               start_date=start_date,
-                                              end_date=end_date,
-                                              year_rebalance=False)
+                                              end_date=end_date)
 
 plot_df = build_plot_data(holdings, portfolio_df, spy_df)
 
@@ -478,8 +467,7 @@ portfolio_bond_plus_shy_df, assets_df = portfolio_return(holdings=holdings,
                                               asset_etfs=asset_adj_close,
                                               bond_etfs=fixed_income_plus_shy,
                                               start_date=start_date,
-                                              end_date=end_date,
-                                              year_rebalance=False)
+                                              end_date=end_date)
 
 plot_df = build_plot_data(holdings, portfolio_bond_plus_shy_df, spy_df)
 
@@ -491,8 +479,7 @@ portfolio_limited_df, assets_df = portfolio_return(holdings=holdings,
                                               asset_etfs=limited_asset_set_df,
                                               bond_etfs=fixed_income_adjclose,
                                               start_date=start_date,
-                                              end_date=end_date,
-                                              year_rebalance=False)
+                                              end_date=end_date)
 
 plot_df = build_plot_data(holdings, portfolio_limited_df, spy_df)
 
@@ -537,8 +524,7 @@ portfolio_new_df, assets_df = portfolio_return(holdings=holdings,
                                               asset_etfs=new_etf_set,
                                               bond_etfs=new_bond_set,
                                               start_date=start_date,
-                                              end_date=end_date,
-                                              year_rebalance=False)
+                                              end_date=end_date)
 
 plot_df = build_plot_data(holdings, portfolio_new_df, spy_df)
 
@@ -549,8 +535,7 @@ portfolio_plus_short_df, assets_df = portfolio_return(holdings=holdings,
                                               asset_etfs=assets_plus_short,
                                               bond_etfs=fixed_income_adjclose,
                                               start_date=start_date,
-                                              end_date=end_date,
-                                              year_rebalance=False)
+                                              end_date=end_date)
 
 plot_df = build_plot_data(holdings, portfolio_plus_short_df, spy_df)
 
@@ -621,8 +606,7 @@ high_corr_portfolio_df, assets_df = portfolio_return(holdings=holdings,
                                               asset_etfs=high_corr_etfs,
                                               bond_etfs=fixed_income_adjclose,
                                               start_date=corr_end_date,
-                                              end_date=end_date,
-                                              year_rebalance=False)
+                                              end_date=end_date)
 
 twelve_percent_df,  assets_df = portfolio_return(holdings=holdings,
                                               asset_percent=equity_percent,
@@ -630,8 +614,7 @@ twelve_percent_df,  assets_df = portfolio_return(holdings=holdings,
                                               asset_etfs=asset_adj_close,
                                               bond_etfs=fixed_income_adjclose,
                                               start_date=corr_end_date,
-                                              end_date=end_date,
-                                              year_rebalance=False)
+                                              end_date=end_date)
 
 
 spy_df_adj, t = adjust_time_series(spy_df, high_corr_portfolio_df)
