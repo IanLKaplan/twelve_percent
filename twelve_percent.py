@@ -479,6 +479,38 @@ portfolio_bond_plus_shy_df, assets_df = portfolio_return(holdings=holdings,
 
 plot_df = build_plot_data(holdings, portfolio_bond_plus_shy_df, spy_df)
 
+d2019_start = datetime.fromisoformat("2019-01-02")
+d2019_end = datetime.fromisoformat("2019-12-31")
+
+d2019_portfolio_df, d2019_assets_df = portfolio_return(holdings=holdings,
+                                              asset_percent=equity_percent,
+                                              bond_percent=bond_percent,
+                                              asset_etfs=asset_adj_close,
+                                              bond_etfs=fixed_income_adjclose,
+                                              start_date=d2019_start,
+                                              end_date=d2019_end)
+
+trendline_assets = ['SHY', # 1
+                    'QQQ', # 2
+                    'QQQ', # 3
+                    'QQQ', # 4
+                    'QQQ', # 5
+                    'QQQ', # 6
+                    'SHY', # 7
+                    'SPY', # 8
+                    'QQQ', # 9
+                    'SPY', # 10
+                    'QQQ', # 11
+                    'QQQ' # 12
+                    ]
+
+trendline_df = pd.DataFrame(trendline_assets)
+trendline_df.index = d2019_assets_df.index
+d2019_assets_df['trendline'] = trendline_df
+d2019_assets_df.drop(d2019_assets_df.columns[1], inplace=True, axis=1)
+print(tabulate(d2019_assets_df, headers=['Equity ETFs', 'Trendline ETFs'], tablefmt='fancy_grid'))
+
+
 limited_asset_set_df = asset_adj_close[['SPY', 'SHY']]
 
 portfolio_limited_df, assets_df = portfolio_return(holdings=holdings,
