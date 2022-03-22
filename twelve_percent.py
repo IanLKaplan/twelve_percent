@@ -490,6 +490,18 @@ d2019_portfolio_df, d2019_assets_df = portfolio_return(holdings=holdings,
                                               start_date=d2019_start,
                                               end_date=d2019_end)
 
+spy_unadj = pd.DataFrame(asset_adj_close['SPY'])
+
+spyonly_df, t = portfolio_return(holdings=holdings,
+                                              asset_percent=equity_percent,
+                                              bond_percent=bond_percent,
+                                              asset_etfs=spy_unadj,
+                                              bond_etfs=spy_unadj,
+                                              start_date=d2019_start,
+                                              end_date=d2019_end)
+
+plot_df = build_plot_data(holdings, spyonly_df, spy_unadj)
+
 trendline_assets = ['SHY', # 1
                     'QQQ', # 2
                     'QQQ', # 3
