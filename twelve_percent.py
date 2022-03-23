@@ -15,6 +15,12 @@ import tempfile
 
 pd.options.mode.chained_assignment = 'raise'
 
+def convert_date(some_date):
+    if type(some_date) == str:
+        some_date = datetime.fromisoformat(some_date)
+    return some_date
+
+
 def get_market_data(file_name: str,
                     data_col: str,
                     symbols: List,
@@ -122,8 +128,7 @@ def findDateIndex(date_index: DatetimeIndex, search_date: datetime) -> int:
     date_t = datetime.today()
     for i in range(0, len(date_index)):
         date_t = date_index[i]
-        if type(date_t) == str:
-            date_t = datetime.fromisoformat(date_t)
+        date_t = convert_date(date_t)
         if date_t >= search_date:
             break
     if date_t > search_date:
@@ -298,11 +303,9 @@ portfolio_df, assets_df = portfolio_return(holdings=holdings,
 
 def build_plot_data(holdings: float, portfolio_df: pd.DataFrame, spy_df: pd.DataFrame) -> pd.DataFrame:
     port_start_date = portfolio_df.index[0]
-    if type(port_start_date) == str:
-        port_start_date = datetime.fromisoformat(port_start_date)
+    port_start_date = convert_date(port_start_date)
     port_end_date = portfolio_df.index[-1]
-    if type(port_end_date) == str:
-        port_end_date = datetime.fromisoformat(port_end_date)
+    port_end_date = convert_date(port_end_date)
     spy_index = spy_df.index
     spy_start_ix = findDateIndex(spy_index, port_start_date)
     spy_end_ix = findDateIndex(spy_index, port_end_date)
@@ -382,8 +385,12 @@ def calc_sharpe_ratio(asset_return: pd.DataFrame, risk_free: pd.Series, period: 
     result_df.columns = asset_return.columns
     ix = asset_return.index
     dateformat = '%Y-%m-%d'
-    ix_start = datetime.strptime(ix[0], dateformat).date()
-    ix_end = datetime.strptime(ix[len(ix)-1], dateformat).date()
+    ix_start = ix[0]
+    if type(ix_start) != str:
+        ix_start = datetime.strptime(ix_start, dateformat).date()
+    ix_end = ix[len(ix)-1]
+    if type(ix_end) != str:
+         ix_end = datetime.strptime(ix_end, dateformat).date()
     index_str = f'{ix_start} : {ix_end}'
     result_df.index = [ index_str ]
     return result_df
@@ -568,6 +575,7 @@ def calc_portfolio_returns(asset_etfs: pd.DataFrame,
     return asset_return_df, bond_return_df, choices_df
 
 
+
 def apply_portfolio_returns(holdings: float,
                             equity_percent: float,
                             bond_percent: float,
@@ -586,14 +594,12 @@ def apply_portfolio_returns(holdings: float,
     asset_return_a = asset_return_df.values
     bond_return_a = bond_return_df.values
     start_date = date_index[0]
-    if type(start_date) == str:
-        start_date = datetime.fromisoformat(start_date)
+    start_date = convert_date(start_date)
     month = start_date.month
     ix = 0
     portfolio_total = portfolio_a[0]
     for ix_date in date_index:
-        if type(ix_date) == str:
-            ix_date = datetime.fromisoformat(ix_date)
+        ix_date = convert_date(ix_date)
         current_month = ix_date.month
         if month != current_month:
             # rebalance the portfolio every month
@@ -633,6 +639,91 @@ def portfolio_return_new(holdings: float,
                                       asset_return_df=asset_return_df,
                                       bond_return_df=bond_return_df)
     return port_df, assets_df
+
+
+class AssetInfo:
+    start_date: datetime
+    end_date: datetime
+    asset: str
+    def __init__(self, asset_name: str, period_start: datetime, period_end: datetime):
+        self.asset = asset_name
+        self.start_date = period_start
+        self.end_date = period_end
+
+    def __str__(self):
+        return f'{self.start_date.strftime("%m/%d/%Y")} - {self.end_date.strftime("%m/%d/%Y")} {self.asset}'
+
+
+def find_asset_set(start_date: datetime, end_date: datetime, prices_df: pd.DataFrame) -> List[AssetInfo]:
+    start_date = convert_date(start_date)
+    end_date = convert_date(end_date)
+    back_delta = relativedelta(months=3)
+    forward_delta = relativedelta(months=1)
+    date_index = prices_df.index
+    start_date_i = start_date
+    current_asset: str = ''
+    asset_list = list()
+    asset_info: AssetInfo
+    while start_date_i <= end_date:
+        # Start of the back-test data
+        back_start = start_date_i - back_delta
+        # End of the backtest data
+        back_end = start_date_i
+        # end of the forward data period (e.g., one month)
+        forward_end = start_date_i + forward_delta
+        start_ix = findDateIndex(date_index, back_start)
+        end_ix = findDateIndex(date_index, back_end)
+        forward_ix = findDateIndex(date_index, forward_end)
+        if start_ix >= 0 and end_ix >= 0 and forward_ix >= 0:
+            asset_df = chooseAsset(start=start_ix, end=end_ix, asset_set=prices_df)
+            month_df = asset_df[:][end_ix:forward_ix]
+            asset_name = month_df.columns[0]
+            month_date_index = month_df.index
+            month_start_date = convert_date(month_date_index[0])
+            month_end_date = convert_date(month_date_index[-1])
+            if asset_name != current_asset:
+                asset_info = AssetInfo(asset_name, month_start_date, month_end_date)
+                current_asset = asset_name
+                asset_list.append( asset_info )
+            else:
+                asset_info.end_date = month_end_date
+            start_date_i = forward_end
+        else:
+            break
+    return asset_list
+
+
+def portfolio_return_new2(holdings: float,
+                          asset_percent: float,
+                          bond_percent: float,
+                          asset_etfs: pd.DataFrame,
+                          bond_etfs: pd.DataFrame,
+                          start_date: datetime,
+                          end_date: datetime) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    asset_set: List[AssetInfo] = find_asset_set(prices_df=asset_etfs,
+                                              start_date=start_date,
+                                              end_date=end_date)
+    bond_set: List[AssetInfo] = find_asset_set(prices_df=bond_etfs,
+                                                start_date=start_date,
+                                                end_date=end_date)
+    asset_holdings = holdings * asset_percent
+    bond_holdings = holdings * bond_percent
+    print("ETF assets")
+    for asset in asset_set:
+        print(asset)
+    print("Bond Assets")
+    for bond in bond_set:
+        print(bond)
+    return None, None
+
+
+portfolio_df, assets_df = portfolio_return_new2(holdings=holdings,
+                                              asset_percent=equity_percent,
+                                              bond_percent=bond_percent,
+                                              asset_etfs=asset_adj_close,
+                                              bond_etfs=fixed_income_adjclose,
+                                              start_date=d2019_start,
+                                              end_date=d2019_end)
 
 
 spyonly_df, t = portfolio_return_new(holdings=holdings,
