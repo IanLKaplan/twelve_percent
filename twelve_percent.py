@@ -70,6 +70,8 @@ start_date: datetime = datetime.fromisoformat(start_date_str)
 look_back_date_str = '2007-12-03'
 look_back_date: datetime = datetime.fromisoformat(look_back_date_str)
 end_date: datetime = datetime.today() - timedelta(days=1)
+# get rid of any time component
+end_date = datetime(end_date.year, end_date.month, end_date.day)
 
 etf_adjclose_file = 'equity_etf_adjclose'
 equity_adj_close = get_market_data(file_name=etf_adjclose_file,
@@ -125,10 +127,10 @@ def findDateIndex(date_index: DatetimeIndex, search_date: datetime) -> int:
     '''
     index: int = -1
     i = 0
+    search_date = convert_date(search_date)
     date_t = datetime.today()
     for i in range(0, len(date_index)):
-        date_t = date_index[i]
-        date_t = convert_date(date_t)
+        date_t = convert_date(date_index[i])
         if date_t >= search_date:
             break
     if date_t > search_date:
@@ -173,16 +175,42 @@ def chooseAsset(start: int, end: int, asset_set: pd.DataFrame) -> pd.DataFrame:
     return rslt_df
 
 
+def chooseAssetName(start: int, end: int, asset_set: pd.DataFrame) -> str:
+    '''
+    Choose an ETF asset or cash for a particular range of close price values.
+    The ETF and cash time series should be contained in a single DataFrame
+    The function returns a DataFrame with the highest returning asset for the
+    period.
+    '''
+    asset_columns = asset_set.columns
+    asset_name = asset_columns[0]
+    if len(asset_columns) > 1:
+        ret_list = []
+        start_date = asset_set.index[start]
+        end_date = asset_set.index[end]
+        for asset in asset_set.columns:
+            ts = asset_set[asset][start:end+1]
+            start_val = ts[0]
+            end_val = ts[-1]
+            r = (end_val/start_val) - 1
+            ret_list.append(r)
+        ret_df = pd.DataFrame(ret_list).transpose()
+        ret_df.columns = asset_set.columns
+        column = ret_df.idxmax(axis=1)[0]
+        asset_name = column
+    return asset_name
+
+
 start_date_ix = findDateIndex(asset_adj_close.index, start_date)
 ts_df = chooseAsset(0, start_date_ix, asset_adj_close)
 
 print(f'The asset for the first three month period will be {ts_df.columns[0]}')
 
+
+def simple_return(time_series: np.array, period: int = 1) -> List:
+    return list(((time_series[i] / time_series[i - period]) - 1.0 for i in range(period, len(time_series), period)))
+
 def return_df(time_series_df: pd.DataFrame) -> pd.DataFrame:
-    def simple_return(time_series: np.array, period: int) -> List :
-        return list(((time_series[i]/time_series[i-period]) - 1.0 for i in range(period, len(time_series), period)))
-
-
     r_df: pd.DataFrame = pd.DataFrame()
     time_series_a: np.array = time_series_df.values
     return_l = simple_return(time_series_a, 1)
@@ -191,6 +219,32 @@ def return_df(time_series_df: pd.DataFrame) -> pd.DataFrame:
     r_df.index = date_index[1:len(date_index)]
     r_df.columns = time_series_df.columns
     return r_df
+
+
+def calc_returns_df(start_date: datetime, end_date: datetime, price_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate the column return of a DataFrame of prices
+    :param start_date:
+    :param end_date:
+    :param price_df:
+    :return: a DataFrame containing the columnar returns
+    """
+    date_index = price_df.index
+    start_ix = findDateIndex(date_index, start_date)
+    end_ix = findDateIndex(date_index, end_date)
+    assert start_ix >= 0 and end_ix >= 0
+    price_sliced_df = price_df[:][start_ix:end_ix+1]
+    return_l = list()
+    for col in price_sliced_df.columns:
+        r_col = price_sliced_df[col].values
+        r_col_l = simple_return(r_col)
+        r_col_df = pd.DataFrame(r_col_l)
+        r_col_df.columns = [col]
+        price_sliced_index = price_sliced_df.index
+        r_col_df.index = price_sliced_index[1:len(price_sliced_index)]
+        return_l.append(r_col_df)
+    returns_df: pd.DataFrame = pd.concat(return_l, axis=1)
+    return returns_df
 
 
 def percent_return_df(start_date: datetime, end_date: datetime, prices_df: pd.DataFrame) -> pd.DataFrame:
@@ -222,6 +276,34 @@ def apply_return(start_val: float, return_df: pd.DataFrame) -> np.array:
     return port_a
 
 
+def find_month_periods(start_date: datetime, end_date:datetime, data: pd.DataFrame) -> pd.DataFrame:
+    start_date = convert_date(start_date)
+    end_date = convert_date(end_date)
+    date_index = data.index
+    start_ix = findDateIndex(date_index, start_date)
+    end_ix = findDateIndex(date_index, end_date)
+    start_l = list()
+    end_l = list()
+    cur_month = start_date.month
+    start_l.append(start_ix)
+    i = 0
+    for i in range(start_ix, end_ix+1):
+        date_i = convert_date(date_index[i])
+        if date_i.month > cur_month:
+            end_l.append(i-1)
+            start_l.append(i)
+            cur_month = date_i.month
+    end_l.append(i)
+    start_df = pd.DataFrame(start_l)
+    end_df = pd.DataFrame(end_l)
+    start_date_df = pd.DataFrame(date_index[start_l])
+    end_date_df = pd.DataFrame(date_index[end_l])
+    periods_df = pd.concat([start_df, start_date_df, end_df, end_date_df], axis=1)
+    periods_df.columns = ['start_ix', 'start_date', 'end_ix', 'end_date']
+    return periods_df
+
+
+
 def portfolio_return(holdings: float,
                      asset_percent: float,
                      bond_percent: float,
@@ -229,56 +311,56 @@ def portfolio_return(holdings: float,
                      bond_etfs: pd.DataFrame,
                      start_date: datetime,
                      end_date: datetime) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    asset_holding= holdings * asset_percent
-    bond_holding=holdings * bond_percent
+    assert asset_etfs.shape[0] == bond_etfs.shape[0]
+    periods_df = find_month_periods(start_date, end_date, asset_etfs)
     back_delta = relativedelta(months=3)
-    forward_delta = relativedelta(months=1)
     date_index = asset_etfs.index
-    start_date_i = start_date
-    portfolio_a = np.zeros(0)
     bond_asset_l = list()
     equity_asset_l = list()
     month_index_l = list()
-    date_index_l = list()
-    while start_date_i <= end_date:
-        # Start of the back-test data
-        back_start = start_date_i - back_delta
-        # End of the backtest data
-        back_end = start_date_i
-        # end of the forward data period (e.g., one month)
-        forward_end = start_date_i + forward_delta
-        start_ix = findDateIndex(date_index, back_start)
-        end_ix = findDateIndex(date_index, back_end)
-        forward_ix = findDateIndex(date_index, forward_end)
-        if start_ix >= 0 and end_ix >= 0 and forward_ix >= 0:
-            # Choose an asset based on the past three months
-            asset_df = chooseAsset(start=start_ix, end=end_ix, asset_set=asset_etfs)
-            asset_month_df = asset_df[:][end_ix:forward_ix]
-            bond_df = chooseAsset(start=start_ix, end=end_ix, asset_set=bond_etfs)
-            bond_month_df = bond_df[:][end_ix:forward_ix]
-            bond_asset = bond_df.columns[0]
-            equity_asset = asset_df.columns[0]
-            equity_asset_l.append(equity_asset)
-            bond_asset_l.append(bond_asset)
-            month_index = asset_month_df.index[0]
-            month_index_l.append(month_index)
-            cur_month_index = asset_month_df.index
-            date_index_l.extend(cur_month_index)
-            asset_return_df = return_df(asset_month_df)
-            bond_return_df = return_df(bond_month_df)
-            port_asset_a = apply_return(asset_holding, asset_return_df)
-            port_bond_a = apply_return(bond_holding, bond_return_df)
-            port_total_a = port_asset_a + port_bond_a
-            portfolio_a = np.append(portfolio_a, port_total_a)
-            asset_holding = port_total_a[-1] * asset_percent
-            bond_holding = port_total_a[-1] * bond_percent
-            last_index = forward_ix
-            start_date_i = forward_end
-        else:
-            break
-    portfolio_df = pd.DataFrame(portfolio_a)
+    asset_returns = calc_returns_df(start_date, end_date, asset_etfs)
+    bond_returns = calc_returns_df(start_date, end_date, bond_etfs)
+    assert asset_returns.shape[0] == bond_returns.shape[0]
+    return_index = asset_returns.index
+    ret_asset_a = np.zeros(asset_returns.shape[0] + 1)
+    ret_bond_a = np.zeros(bond_returns.shape[0] + 1)
+    port_total_a = np.zeros(asset_returns.shape[0] + 1)
+    port_total_a[0] = holdings
+    ret_ix = 1
+    first_block = True
+    for row in range(periods_df.shape[0]):
+        period_info = periods_df[:][row:row+1]
+        month_start_date = convert_date(period_info['start_date'].values[0])
+        month_end_date = convert_date(period_info['end_date'].values[0])
+        back_start_date = month_start_date - back_delta
+        back_start_ix = findDateIndex(date_index, back_start_date)
+        month_start_ix = period_info['start_ix'].values[0]
+        equity_asset = chooseAssetName(start=back_start_ix, end=month_start_ix, asset_set=asset_etfs)
+        bond_asset = chooseAssetName(start=back_start_ix, end=month_start_ix, asset_set=bond_etfs)
+        equity_asset_l.append(equity_asset)
+        bond_asset_l.append(bond_asset)
+        month_index_l.append(month_start_date)
+        return_start_ix = findDateIndex(return_index, month_start_date)
+        return_end_ix = findDateIndex(return_index, month_end_date)
+        if first_block:
+            return_start_ix = return_start_ix + 1
+            first_block = False
+        asset_return_block_s = asset_returns[equity_asset][return_start_ix:return_end_ix + 1]
+        bond_return_block_s = bond_returns[bond_asset][return_start_ix:return_end_ix + 1]
+        # rebalance
+        ret_asset_a[ret_ix - 1] = port_total_a[ret_ix - 1] * asset_percent
+        ret_bond_a[ret_ix - 1] = port_total_a[ret_ix - 1] * bond_percent
+        for i in range(0, len(asset_return_block_s)):
+            ret_asset_a[ret_ix] = ret_asset_a[ret_ix - 1] + ret_asset_a[ret_ix - 1] * asset_return_block_s[i]
+            ret_bond_a[ret_ix] = ret_bond_a[ret_ix - 1] + ret_bond_a[ret_ix - 1] * bond_return_block_s[i]
+            port_total_a[ret_ix] = ret_asset_a[ret_ix] + ret_bond_a[ret_ix]
+            ret_ix = ret_ix + 1
+    portfolio_df = pd.DataFrame(port_total_a)
     portfolio_df.columns = ['portfolio']
-    portfolio_df.index = date_index_l
+    start_ix = findDateIndex(date_index, start_date)
+    end_ix = findDateIndex(date_index, end_date)
+    portfolio_index = date_index[start_ix:end_ix+1]
+    portfolio_df.index = portfolio_index
     choices_df = pd.DataFrame()
     choices_df['Equity'] = pd.DataFrame(equity_asset_l)
     choices_df['Bond'] = pd.DataFrame(bond_asset_l)
@@ -290,6 +372,19 @@ def portfolio_return(holdings: float,
 holdings = 100000
 equity_percent = 0.6
 bond_percent = 0.4
+
+d2019_start = datetime.fromisoformat("2019-01-02")
+d2019_end = datetime.fromisoformat("2019-12-31")
+
+t = find_month_periods(d2019_start, d2019_end, asset_adj_close)
+
+d2019_portfolio_df, d2019_assets_df = portfolio_return(holdings=holdings,
+                                              asset_percent=equity_percent,
+                                              bond_percent=bond_percent,
+                                              asset_etfs=asset_adj_close,
+                                              bond_etfs=fixed_income_adjclose,
+                                              start_date=d2019_start,
+                                              end_date=d2019_end)
 
 tlt = pd.DataFrame(fixed_income_adjclose['TLT'])
 portfolio_df, assets_df = portfolio_return(holdings=holdings,
@@ -485,16 +580,6 @@ portfolio_bond_plus_shy_df, assets_df = portfolio_return(holdings=holdings,
 
 plot_df = build_plot_data(holdings, portfolio_bond_plus_shy_df, spy_df)
 
-d2019_start = datetime.fromisoformat("2019-01-02")
-d2019_end = datetime.fromisoformat("2019-12-31")
-
-d2019_portfolio_df, d2019_assets_df = portfolio_return(holdings=holdings,
-                                              asset_percent=equity_percent,
-                                              bond_percent=bond_percent,
-                                              asset_etfs=asset_adj_close,
-                                              bond_etfs=fixed_income_adjclose,
-                                              start_date=d2019_start,
-                                              end_date=d2019_end)
 
 spy_unadj = pd.DataFrame(asset_adj_close['SPY'])
 
@@ -692,6 +777,24 @@ def find_asset_set(start_date: datetime, end_date: datetime, prices_df: pd.DataF
             break
     return asset_list
 
+"""
+ETF assets
+01/02/2019 - 02/28/2019 SHY
+03/01/2019 - 04/01/2019 IWM
+04/02/2019 - 05/30/2019 QQQ
+05/31/2019 - 07/01/2019 SHY
+07/02/2019 - 08/01/2019 QQQ
+08/02/2019 - 08/29/2019 SHY
+08/30/2019 - 10/01/2019 QQQ
+10/02/2019 - 10/31/2019 SHY
+11/01/2019 - 12/31/2019 QQQ
+
+Bond Assets
+01/02/2019 - 02/28/2019 TLT
+03/01/2019 - 05/30/2019 JNK
+05/31/2019 - 11/29/2019 TLT
+12/02/2019 - 12/31/2019 JNK
+"""
 
 def portfolio_return_new2(holdings: float,
                           asset_percent: float,
