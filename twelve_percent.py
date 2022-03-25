@@ -289,7 +289,7 @@ def find_month_periods(start_date: datetime, end_date:datetime, data: pd.DataFra
     i = 0
     for i in range(start_ix, end_ix+1):
         date_i = convert_date(date_index[i])
-        if date_i.month > cur_month:
+        if date_i.month != cur_month:
             end_l.append(i-1)
             start_l.append(i)
             cur_month = date_i.month
@@ -335,20 +335,12 @@ def portfolio_return(holdings: float,
         month_index_l.append(month_start_date)
         asset_month_prices_df = pd.DataFrame(asset_etfs[equity_asset][month_start_ix:month_end_ix + 1])
         bond_month_prices_df = pd.DataFrame(bond_etfs[bond_asset][month_start_ix:month_end_ix + 1])
-        """
-        t_df = pd.concat([pd.DataFrame(asset_month_prices_df[:][0:1]),
-                          pd.DataFrame(asset_month_prices_df[:][asset_month_prices_df.shape[0]-1:asset_month_prices_df.shape[0]])],
-                         axis=0)
-        print(t_df)
-        print()
-        """
         asset_month_return_df = return_df(asset_month_prices_df)
         bond_month_return_df = return_df(bond_month_prices_df)
         asset_month_a = apply_return(asset_holdings, asset_month_return_df)
         bond_month_a = apply_return(bond_holdings, bond_month_return_df)
         portfolio_total_a = asset_month_a + bond_month_a
         holdings = portfolio_total_a[-1]
-        print(f'month_start_date: {month_start_date} asset_holdings: {asset_holdings} bond_holdings: {bond_holdings} total: {holdings}')
         portfolio_a = np.append(portfolio_a, portfolio_total_a)
     portfolio_df = pd.DataFrame(portfolio_a)
     portfolio_df.columns = ['portfolio']
@@ -388,6 +380,7 @@ portfolio_df, assets_df = portfolio_return(holdings=holdings,
                                               start_date=start_date,
                                               end_date=end_date)
 
+pass
 
 def build_plot_data(holdings: float, portfolio_df: pd.DataFrame, spy_df: pd.DataFrame) -> pd.DataFrame:
     port_start_date = portfolio_df.index[0]
