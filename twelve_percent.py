@@ -15,6 +15,7 @@ import tempfile
 plt.style.use('seaborn-whitegrid')
 pd.options.mode.chained_assignment = 'raise'
 
+
 def get_market_data(file_name: str,
                     data_col: str,
                     symbols: List,
@@ -252,6 +253,13 @@ def return_df(time_series_df: pd.DataFrame) -> pd.DataFrame:
     return r_df
 
 
+def return_a(time_series_df: pd.DataFrame) -> np.array:
+    time_series_a: np.array = time_series_df.values
+    return_l = simple_return(time_series_a, 1)
+    r_a = np.array(return_l)
+    return r_a
+
+
 def apply_return(start_val: float, return_df: pd.DataFrame) -> np.array:
     port_a: np.array = np.zeros( return_df.shape[0] + 1)
     port_a[0] = start_val
@@ -259,6 +267,15 @@ def apply_return(start_val: float, return_df: pd.DataFrame) -> np.array:
     for i in range(1, len(port_a)):
         port_a[i] = port_a[i-1] + port_a[i-1] * return_a[i-1]
     return port_a
+
+
+def apply_return_a(start_val:float, return_a: np.array) -> np.array:
+    v_n: float = start_val
+    values_a = np.zeros(len(return_a))
+    for i, r in enumerate(return_a):
+        values_a[i] = v_n + v_n * r
+        v_n = values_a[i]
+    return values_a
 
 
 def find_month_periods(start_date: datetime, end_date:datetime, data: pd.DataFrame) -> pd.DataFrame:
@@ -295,6 +312,17 @@ def portfolio_return(holdings: float,
                      bond_etfs: pd.DataFrame,
                      start_date: datetime,
                      end_date: datetime) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    An implementation of the 12% Solution ETF rotation. From start_date to end_date
+    the code calculates the highest past three month return from the asset_etfs and bond_etfs. The
+    ETF with the highest return is selected for the next month.
+
+    Calculate the monthly period from start_date to end_date. This will provide the monthly periods
+    for the calculation.
+
+    The daily returns are calculated for the next month and applied to the current portfolio balance.
+    Then the loop steps forward by one month.
+    """
     assert asset_etfs.shape[0] == bond_etfs.shape[0]
     periods_df = find_month_periods(start_date, end_date, asset_etfs)
     back_delta = relativedelta(months=3)
@@ -337,6 +365,84 @@ def portfolio_return(holdings: float,
     choices_df['Bond'] = pd.DataFrame(bond_asset_l)
     choices_df.index = month_index_l
     return portfolio_df, choices_df
+
+
+def portfolio_replay(holdings: float,
+                     asset_percent: float,
+                     bond_percent: float,
+                     asset_etfs: pd.DataFrame,
+                     bond_etfs: pd.DataFrame,
+                     allocation: pd.DataFrame) -> pd.DataFrame:
+    """
+    Given an allocation dataframe that defines the month periods and the equity (or SHY) ETFs and the
+    bond ETFs, calculate a portfolio value from the continuously compounded returns.
+
+    The allocation DataFrame has four columns: entry, exit, equity, bond  Entry is the month period
+    start date, exist is the end date, equity is the equity ETF for SHY and bond is the bond ETF.
+
+    We assume that the asset_etfs and bond_etfs contain sufficient data.
+    """
+    date_index = asset_etfs.index
+    start_date_col = allocation.columns[0]
+    end_date_col = allocation.columns[1]
+    asset_col = allocation.columns[2]
+    bond_col = allocation.columns[3]
+    num_rows = allocation.shape[0]
+    first_row = allocation[:][0:1]
+    last_row = allocation[:][num_rows-1:num_rows]
+    start_date = first_row[start_date_col].values[0]
+    end_date = last_row[end_date_col].values[0]
+    start_ix = findDateIndex(date_index, start_date)
+    end_ix = findDateIndex(date_index, end_date)
+    date_l = []
+    portfolio_a = np.zeros(1)
+    portfolio_a[0] = holdings
+    first = True
+    for index, month_allocation in allocation.iterrows():
+        start_date_str = month_allocation[start_date_col]
+        end_date_str = month_allocation[end_date_col]
+        equity_asset = month_allocation[asset_col]
+        bond_asset = month_allocation[bond_col]
+        asset_holdings = holdings * asset_percent
+        bond_holdings = holdings * bond_percent
+        month_start_ix = findDateIndex(date_index, start_date_str)
+        month_end_ix = findDateIndex(date_index, end_date_str)
+        asset_month_prices_df = pd.DataFrame(asset_etfs[equity_asset][month_start_ix:month_end_ix+1])
+        bond_month_prices_df = pd.DataFrame(bond_etfs[bond_asset][month_start_ix:month_end_ix+1])
+        month_date_index = asset_month_prices_df.index
+        if first:
+            date_l.append(month_date_index)
+            first = False
+        else:
+            date_l.append(month_date_index[1:])
+        asset_month_return_a = return_a(asset_month_prices_df)
+        bond_month_return_a = return_a(bond_month_prices_df)
+        asset_month_a = apply_return_a(asset_holdings, asset_month_return_a)
+        bond_month_a = apply_return_a(bond_holdings, bond_month_return_a)
+        portfolio_total_a = asset_month_a + bond_month_a
+        portfolio_a = np.append(portfolio_a, portfolio_total_a)
+        holdings = portfolio_total_a[-1]
+    portfolio_df = pd.DataFrame(portfolio_a)
+    date_l = list(np.concatenate(date_l).flatten())
+    portfolio_index = date_l
+    portfolio_df.index = portfolio_index
+    return portfolio_df
+
+
+def read_allocation_data(file_path: str) -> pd.DataFrame:
+    temp_file_path = Path(file_path)
+    file_size = 0
+    allocation_df = pd.DataFrame()
+    if temp_file_path.exists():
+        file_size = temp_file_path.stat().st_size
+        if file_size > 0:
+            allocation_df = pd.read_csv(file_path, index_col=False)
+        else:
+            print(f'Error: file at {file_path} has zero size')
+    else:
+        print(f'Error: Could not find file at location {file_path}')
+
+    return allocation_df
 
 
 holdings = 100000
@@ -595,6 +701,43 @@ spyonly_df, t = portfolio_return(holdings=holdings,
                                               end_date=d2019_end)
 
 plot_df = build_plot_data(holdings, spyonly_df, spy_unadj)
+
+
+allocations_df = read_allocation_data('data/trendlineprofits_assets.csv')
+
+start_date_col = allocations_df.columns[0]
+end_date_col = allocations_df.columns[1]
+asset_col = allocations_df.columns[2]
+bond_col = allocations_df.columns[3]
+num_rows = allocations_df.shape[0]
+first_row = allocations_df[:][0:1]
+last_row = allocations_df[:][num_rows - 1:num_rows]
+trend_start_date = first_row[start_date_col].values[0]
+trend_end_date = last_row[end_date_col].values[0]
+trend_line_periods = find_month_periods(trend_start_date, trend_end_date, asset_adj_close)
+composit_df = pd.concat([trend_line_periods, allocations_df[asset_col], allocations_df[bond_col]], axis=1)
+
+
+trendline_portfolio_df = portfolio_replay(holdings=holdings,
+                                          asset_percent=equity_percent,
+                                          bond_percent=bond_percent,
+                                          asset_etfs=asset_adj_close,
+                                          bond_etfs=fixed_income_adjclose,
+                                          allocation=allocations_df)
+
+notebook_portfolio_df, assets = portfolio_return(holdings=holdings,
+                                              asset_percent=equity_percent,
+                                              bond_percent=bond_percent,
+                                              asset_etfs=asset_adj_close,
+                                              bond_etfs=fixed_income_adjclose,
+                                              start_date=trend_start_date,
+                                              end_date=trend_end_date)
+
+trendline_portfolio_df.columns = ['trendline']
+notebook_portfolio_df.columns = ['notebook']
+compare_df = pd.concat([trendline_portfolio_df, notebook_portfolio_df], axis=1)
+compare_df.plot(grid=True, title='trendlineprofits.com and notebook portfolio', figsize=(10,6))
+plt.show()
 
 trendline_assets = ['SHY', # 1
                     'QQQ', # 2
