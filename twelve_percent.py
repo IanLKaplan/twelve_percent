@@ -115,6 +115,9 @@ print(tabulate(corr_mat, headers=[*corr_mat.columns], tablefmt='fancy_grid'))
 def convert_date(some_date):
     if type(some_date) == str:
         some_date = datetime.fromisoformat(some_date)
+    elif type(some_date) == np.datetime64:
+        ts = (some_date - np.datetime64('1970-01-01T00:00')) / np.timedelta64(1, 's')
+        some_date = datetime.utcfromtimestamp(ts)
     return some_date
 
 
@@ -280,6 +283,10 @@ def find_month_periods(start_date: datetime, end_date:datetime, data: pd.DataFra
             start_l.append(i)
             cur_month = date_i.month
     end_l.append(i)
+    # if there is note something like a full month period, remove the last period
+    if end_l[-1] - start_l[-1] < 18:
+        end_l.pop()
+        start_l.pop()
     start_df = pd.DataFrame(start_l)
     end_df = pd.DataFrame(end_l)
     start_date_df = pd.DataFrame(date_index[start_l])
@@ -340,9 +347,12 @@ def portfolio_return(holdings: float,
         portfolio_a = np.append(portfolio_a, portfolio_total_a)
     portfolio_df = pd.DataFrame(portfolio_a)
     portfolio_df.columns = ['portfolio']
-    start_ix = findDateIndex(date_index, start_date)
-    end_ix = findDateIndex(date_index, end_date)
-    portfolio_index = date_index[start_ix:end_ix+1]
+    num_rows = periods_df.shape[0]
+    first_row = periods_df[:][0:1]
+    last_row = periods_df[:][num_rows - 1:num_rows]
+    start_ix = first_row['start_ix'].values[0]
+    end_ix = last_row['end_ix'].values[0]
+    portfolio_index = date_index[start_ix:end_ix + 1]
     portfolio_df.index = portfolio_index
     choices_df = pd.DataFrame()
     choices_df['Equity'] = pd.DataFrame(equity_asset_l)
