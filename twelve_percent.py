@@ -161,33 +161,6 @@ start_date_ix = findDateIndex(asset_adj_close.index, start_date)
 assert start_date_ix >= 0
 
 
-def chooseAsset(start: int, end: int, asset_set: pd.DataFrame) -> pd.DataFrame:
-    '''
-    Choose an ETF asset for a particular range of close price values.
-    The ETF time series should be contained in a single DataFrame
-    The function returns a DataFrame with the highest returning asset for the
-    period.
-    '''
-    rslt_df = asset_set
-    asset_name = asset_set.columns[0]
-    if asset_set.shape[1] > 1:
-        ret_list = []
-        start_date = asset_set.index[start]
-        end_date = asset_set.index[end]
-        for asset in asset_set.columns:
-            ts = asset_set[asset][start:end+1]
-            start_val = ts[0]
-            end_val = ts[-1]
-            r = (end_val/start_val) - 1
-            ret_list.append(r)
-        ret_df = pd.DataFrame(ret_list).transpose()
-        ret_df.columns = asset_set.columns
-        column = ret_df.idxmax(axis=1)[0]
-        asset_name = column
-        rslt_df = pd.DataFrame(asset_set[column])
-    return rslt_df
-
-
 def chooseAssetName(start: int, end: int, asset_set: pd.DataFrame) -> str:
     '''
     Choose an ETF asset or cash for a particular range of close price values.
@@ -209,6 +182,7 @@ def chooseAssetName(start: int, end: int, asset_set: pd.DataFrame) -> str:
             ret_list.append(r)
         ret_df = pd.DataFrame(ret_list).transpose()
         ret_df.columns = asset_set.columns
+        ret_df = round(ret_df, 3)
         column = ret_df.idxmax(axis=1)[0]
         asset_name = column
     return asset_name
