@@ -7,9 +7,6 @@ April 2022
 </h2>
 
 <p>
-This Jupyter notebook is saved on GitHub: https://github.com/IanLKaplan/twelve_percent
-</p>
-<p>
 The approach to investment return and risk varies with the investor and their stage
 in life.  A prudent investor that
 does not need to access their investments for twenty years might be willing to accept
